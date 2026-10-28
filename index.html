@@ -37,7 +37,7 @@
   /* ---------- top bar ---------- */
   #topbar {
     position: fixed; top: 0; left: var(--rail-w); right: 0; height: var(--bar-h); z-index: 10;
-    display: flex; align-items: center; gap: 12px; padding: 0 14px;
+    display: flex; align-items: center; gap: 8px; padding: 0 12px; overflow-x: auto;
     background: #ffffff; border-bottom: 2px solid #b8b8b8;
   }
   .circle-btn {
@@ -96,6 +96,9 @@
   .bar-btn:active { background: #e6e6e6; }
   .bar-btn.open { border: 2.5px solid #111; }
   .bar-spacer { flex: 1; }
+  .stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .stepper .opt-btn { width: 64px; flex-shrink: 0; margin-bottom: 0; font-size: 20px; }
+  .grid-value { flex: 1; text-align: center; font-size: 22px; font-weight: 700; }
   .text-select {
     width: 100%; height: 44px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
     font-size: 16px; padding: 0 8px; margin-bottom: 8px; color: #111;
@@ -142,6 +145,15 @@
   <div class="group">
     <div class="glabel">Tools</div>
     <button class="rail-btn tool-btn" data-tool="select" id="selectBtn" title="Select, move, resize and rotate">↖<span class="cap">Select</span></button>
+    <button class="rail-btn tool-btn" data-tool="measure" id="measureBtn" title="Measure the distance between two points">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <g transform="rotate(-45 12 12)">
+          <rect x="1.5" y="9" width="21" height="6" rx="1"></rect>
+          <path d="M5 9v3M8 9v2M11 9v3M14 9v2M17 9v3M20 9v3"></path>
+        </g>
+      </svg>
+      <span class="cap">Measure</span>
+    </button>
     <button class="rail-btn tool-btn" data-tool="pen" data-drawer="pen" id="penBtn" title="Pen">✏️<span class="cap">Pen</span></button>
     <button class="rail-btn tool-btn" data-tool="eraser" data-drawer="eraser" id="eraserBtn" title="Eraser">🧽<span class="cap">Eraser</span></button>
     <button class="rail-btn" data-drawer="shapes" id="shapeBtn" title="Shapes">
@@ -160,25 +172,10 @@
 
   <div class="group">
     <div class="glabel">View</div>
-    <button class="rail-btn" id="gridBtn" title="Show grid">▦<span class="cap">Grid</span></button>
-    <button class="rail-btn" id="snapBtn" title="Snap to grid">⊞<span class="cap">Snap</span></button>
-    <select id="gridSpacing" class="rail-select" title="Grid spacing">
-      <option value="10">10</option>
-      <option value="20">20</option>
-      <option value="40" selected>40</option>
-      <option value="80">80</option>
-    </select>
+    <button class="rail-btn" data-drawer="grid" id="gridBtn" title="Grid and snapping">▦<span class="cap">Grid</span></button>
     <button class="rail-btn" id="resetViewBtn" title="Reset zoom">⤢<span class="cap">Zoom 1:1</span></button>
   </div>
 
-  <div class="group">
-    <div class="glabel">Edit</div>
-    <button class="rail-btn" id="cutBtn" title="Cut selected" disabled>✂️<span class="cap">Cut</span></button>
-    <button class="rail-btn" id="copyObjBtn" title="Copy selected" disabled>⧉<span class="cap">Copy</span></button>
-    <button class="rail-btn" id="pasteBtn" title="Paste" disabled>📋<span class="cap">Paste</span></button>
-    <button class="rail-btn" id="delBtn" title="Delete selected" disabled>⌫<span class="cap">Delete</span></button>
-    <button class="rail-btn" id="clearBtn" title="Clear all">🗑<span class="cap">Clear</span></button>
-  </div>
 
 </nav>
 
@@ -196,6 +193,10 @@
       <polyline points="20 3.5 20 8 15.5 8"></polyline>
     </svg>
   </button>
+  <button class="bar-btn" id="cutBtn" title="Cut selected" disabled>✂️<span class="cap">Cut</span></button>
+  <button class="bar-btn" id="copyObjBtn" title="Copy selected" disabled>⧉<span class="cap">Copy</span></button>
+  <button class="bar-btn" id="pasteBtn" title="Paste" disabled>📋<span class="cap">Paste</span></button>
+  <button class="bar-btn" id="delBtn" title="Delete selected" disabled>⌫<span class="cap">Delete</span></button>
   <button class="bar-btn" data-drawer="import" id="importBtn" title="Pictures and projects">📁<span class="cap">Files</span></button>
   <button class="bar-btn" id="saveBtn" title="Save drawing as PNG">💾<span class="cap">Save PNG</span></button>
   <button class="bar-btn" id="copyBtn" title="Copy drawing as PNG to clipboard">
@@ -257,7 +258,31 @@
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
   <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
   <input id="shapeWidth" class="width-input" type="range" min="1" max="30" value="4">
+  <div class="sub">Dimensions</div>
+  <button id="dimLiveBtn" class="opt-btn">📏 Dimensions while drawing: Off</button>
+  <button id="dimKeepBtn" class="opt-btn">Keep dimensions on drawing: Off</button>
+  <p class="hint">Dimensions show the width and height of a rectangle or oval as you draw it. Keep them to leave them on the drawing.</p>
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved.</p>
+</aside>
+
+<!-- Grid drawer: grid on or off, spacing in inches or centimetres, snapping -->
+<aside class="drawer" id="drawer-grid" aria-label="Grid">
+  <h3>Grid <button class="close" data-close aria-label="Close">✕</button></h3>
+  <button id="gridShowBtn" class="opt-btn">▦ Show grid: Off</button>
+  <div class="sub">Units</div>
+  <div class="opt-row">
+    <button id="unitInBtn" class="opt-btn">Inches</button>
+    <button id="unitCmBtn" class="opt-btn">Centimetres</button>
+  </div>
+  <div class="sub">Spacing</div>
+  <div class="stepper">
+    <button id="gridDown" class="opt-btn" title="Smaller">▼</button>
+    <span id="gridValue" class="grid-value">1/2 in</span>
+    <button id="gridUp" class="opt-btn" title="Larger">▲</button>
+  </div>
+  <div class="sub">Snapping</div>
+  <button id="snapBtn" class="opt-btn">⊞ Snap to grid: Off</button>
+  <p class="hint">Spacing uses 96 drawing units per inch. Dimensions and measurements use the same unit. Screen scale varies between iPad models, so a printed inch may not match exactly.</p>
 </aside>
 
 <!-- Eraser drawer -->
@@ -280,6 +305,7 @@
   <p class="hint">Supported: SVG, PNG, JPEG, WebP and GIF (first frame only). Up to 10 MB per file. Pictures go on the active layer, and you can then move, resize and rotate them.</p>
   <p class="hint">SVG files stay sharp when enlarged. Once placed, an imported picture is a single object. Its parts can't be selected separately.</p>
   <div class="sub">Project</div>
+  <button id="newProjectBtn" class="opt-btn">📄 New project</button>
   <button id="saveProjectBtn" class="opt-btn">💾 Save project</button>
   <button id="openProjectBtn" class="opt-btn">📂 Open project</button>
   <input id="projectInput" type="file" hidden>
@@ -333,13 +359,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.16.2</div>
+<div id="version">v0.17.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.16.2';
+  const APP_VERSION = '0.17.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -372,6 +398,7 @@
   let undoStack = [], redoStack = [];
   let current = null;        // item being drawn
   let preview = null;        // line or shape being dragged out (not yet committed)
+  let measure = null;        // measurement shown on screen: {a, b} in drawing units, not saved
   let selected = null;       // selected item
   let drag = null;           // move, resize or rotate in progress
   let tool = 'pen';          // 'select' | 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
@@ -382,7 +409,7 @@
   let shapeFilled = false;
   let showGrid = false;
   let snap = false;
-  let GRID = 40;             // grid spacing and snap step, in drawing units
+  let GRID = 48;             // grid spacing and snap step, in drawing units (set from the Grid drawer)
   let penInUse = false;      // once the Pencil is used, finger touches are ignored for drawing
   let activePointerId = null;
   let view = { scale: 1, ox: 0, oy: 0 };  // zoom and pan, in CSS pixels
@@ -575,6 +602,82 @@
     shapePath(c, target, false);
     c.lineWidth = s.size;
     c.stroke();
+    c.restore();
+    if (s.dims && (s.shape === 'rect' || s.shape === 'oval')) drawDims(c, s);
+  }
+
+  // Dimension lines: width along the top edge, height down the right edge.
+  // They follow the object when it moves, turns or resizes.
+  function drawDims(c, s) {
+    const f = frameOf(s), off = 22 / view.scale;
+    const P = (x, y) => localToWorld(f, x, y);
+    const hw = f.w / 2, hh = f.h / 2;
+    dimLine(c, P(-hw, -hh - off), P(hw, -hh - off),
+      [[P(-hw, -hh), P(-hw, -hh - off)], [P(hw, -hh), P(hw, -hh - off)]], formatLength(f.w));
+    dimLine(c, P(hw + off, -hh), P(hw + off, hh),
+      [[P(hw, -hh), P(hw + off, -hh)], [P(hw, hh), P(hw + off, hh)]], formatLength(f.h));
+  }
+
+  // One dimension line with slanted end ticks, extension lines, and a label on a white backing
+  function dimLine(c, a, b, ext, text) {
+    const k = view.scale, tick = 5 / k;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+    if (len < 1) return;
+    const ux = dx / len, uy = dy / len;
+    const ink = '#1a3d9c';
+    c.save();
+    c.strokeStyle = ink;
+    c.fillStyle = ink;
+    c.lineWidth = 1.2 / k;
+    c.lineCap = 'butt';
+    c.beginPath();
+    for (const [p, q] of ext) { c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); }
+    c.moveTo(a.x, a.y);
+    c.lineTo(b.x, b.y);
+    for (const p of [a, b]) {
+      c.moveTo(p.x - (ux - uy) * tick, p.y - (uy + ux) * tick);
+      c.lineTo(p.x + (ux - uy) * tick, p.y + (uy + ux) * tick);
+    }
+    c.stroke();
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    c.font = `${13 / k}px -apple-system, system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const tw = c.measureText(text).width, pad = 4 / k, h = 17 / k;
+    c.fillStyle = '#ffffff';
+    c.fillRect(mx - tw / 2 - pad, my - h / 2, tw + pad * 2, h);
+    c.fillStyle = ink;
+    c.fillText(text, mx, my);
+    c.restore();
+  }
+
+  // Measurement overlay: a line between the two points, with its length
+  function drawMeasure(c) {
+    const { a, b } = measure, k = view.scale;
+    const ink = '#e8590c';
+    c.save();
+    c.strokeStyle = ink;
+    c.fillStyle = ink;
+    c.lineWidth = 2 / k;
+    c.beginPath();
+    c.moveTo(a.x, a.y);
+    c.lineTo(b.x, b.y);
+    c.stroke();
+    for (const p of [a, b]) {
+      c.beginPath();
+      c.arc(p.x, p.y, 4 / k, 0, Math.PI * 2);
+      c.fill();
+    }
+    const text = formatLength(Math.hypot(b.x - a.x, b.y - a.y));
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 18 / k;
+    c.font = `bold ${13 / k}px -apple-system, system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const tw = c.measureText(text).width, pad = 4 / k, h = 18 / k;
+    c.fillStyle = '#ffffff';
+    c.fillRect(mx - tw / 2 - pad, my - h / 2, tw + pad * 2, h);
+    c.fillStyle = ink;
+    c.fillText(text, mx, my);
     c.restore();
   }
 
@@ -798,6 +901,10 @@
     if (selected) {
       setTransform(ctx);
       drawSelection(ctx);
+    }
+    if (measure) {
+      setTransform(ctx);
+      drawMeasure(ctx);
     }
   }
 
@@ -1053,6 +1160,16 @@
       return;
     }
 
+    // Measure: drag from one point to another to read the distance
+    if (tool === 'measure') {
+      const p = snap ? snapPt(raw) : raw;
+      measure = { a: p, b: p };
+      activePointerId = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
+      scheduleRender(false);
+      return;
+    }
+
     // Text: one tap places the typed words, centred on the tap point
     if (tool === 'text') {
       placeText(raw);
@@ -1079,6 +1196,7 @@
       straight: !isShape && mode === 'line',
       shape: isShape ? tool : null,
       filled: isShape && shapeFilled,
+      dims: isShape && dimLive,   // dimension lines while drawing
       pointerType: e.pointerType,
       points: dragging ? [pt, { ...pt }] : [raw]
     };
@@ -1098,6 +1216,13 @@
       if (gesture) { if (touches.size >= 2) updateGesture(); return; }
     }
     if (gesture) return;
+
+    if (measure && e.pointerId === activePointerId) {
+      const q = toWorld(e);
+      measure.b = snap ? snapPt(q) : q;
+      scheduleRender(false);
+      return;
+    }
 
     if (drag) {
       if (e.pointerId === activePointerId) updateDrag(toWorld(e));
@@ -1138,13 +1263,19 @@
       touches.delete(e.pointerId);
       if (touches.size < 2) gesture = null;
     }
+    if (measure && e.pointerId === activePointerId) {
+      activePointerId = null;
+      showToast('Distance ' + formatLength(Math.hypot(measure.b.x - measure.a.x, measure.b.y - measure.a.y)));
+      return;
+    }
     if (drag) {
       if (e.pointerId === activePointerId) finishDrag();
       return;
     }
     if (!current || e.pointerId !== activePointerId) return;
     pushHistory(snapshot());
-    strokes = [...strokes, current];
+    // Dimension lines stay on the drawing only if "keep" is on
+    strokes = [...strokes, { ...current, dims: !!current.dims && dimKeep }];
     current = null;
     activePointerId = null;
     preview = null;
@@ -1197,13 +1328,6 @@
     redrawInk();
   }
 
-  function clearAll() {
-    if (!strokes.length) return;
-    pushHistory(snapshot());
-    strokes = [];
-    selected = null;
-    redrawInk();
-  }
 
   function updateButtons() {
     $('undoBtn').disabled = undoStack.length === 0;
@@ -1575,6 +1699,7 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  // Returns true when the project was saved, and false if the user cancelled or it failed
   async function saveProject() {
     setImportMsg('Saving…');
     try {
@@ -1585,16 +1710,45 @@
         try {
           await navigator.share({ files: [file] });   // no title: iPadOS can use it as the file name
           setImportMsg('Project saved.');
-          return;
+          return true;
         } catch (err) {
-          if (err.name === 'AbortError') { setImportMsg(''); return; }   // cancelled by the user
+          if (err.name === 'AbortError') { setImportMsg(''); return false; }   // cancelled by the user
         }
       }
       downloadFile(file);
       setImportMsg('Project downloaded. Move it to Files if you want it elsewhere.');
+      return true;
     } catch (err) {
       setImportMsg('Could not save the project.');
+      return false;
     }
+  }
+
+  // Starts an empty project. With work on the page, it offers to save first.
+  async function newProject() {
+    if (strokes.length || layers.length > 1) {
+      if (confirm('Save the current project before starting a new one?')) {
+        const saved = await saveProject();
+        if (!saved) return;   // saving was cancelled or failed: keep the drawing
+      } else if (!confirm('Discard the current drawing? You can undo this.')) {
+        return;
+      }
+    }
+    pushHistory(snapshot());
+    endTextEdit();
+    layers = [{ id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }];
+    layerSeq = 1;
+    activeLayer = 'L1';
+    strokes = [];
+    selected = null;
+    current = null;
+    preview = null;
+    measure = null;
+    openDrawer = null;
+    syncDrawers();
+    redrawInk();
+    renderLayerList();
+    showToast('New project');
   }
 
   function loadDataUrl(url) {
@@ -1683,6 +1837,61 @@
     if (files.length) openProject(files[0]);
   });
 
+  // ---------- grid, units, dimensions and measuring ----------
+  const PX_PER_INCH = 96;   // drawing units per inch, the usual screen convention
+  let gridUnit = 'in';      // 'in' or 'cm': used for the grid, dimensions and measurements
+  let gridIn = 0.5;         // grid spacing in inches, in steps of 1/8
+  let gridCm = 1;           // grid spacing in centimetres, in steps of 0.5
+  let dimLive = false;      // dimension lines while drawing rectangles and ovals
+  let dimKeep = false;      // keep those dimension lines on the drawing
+  const FRACS = ['', '1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8'];
+
+  function updateGrid() {
+    GRID = gridUnit === 'cm' ? gridCm * PX_PER_INCH / 2.54 : gridIn * PX_PER_INCH;
+  }
+
+  function gridLabel() {
+    if (gridUnit === 'cm') return `${gridCm} cm`;
+    const eighths = Math.round(gridIn * 8);
+    const whole = Math.floor(eighths / 8), rem = eighths % 8;
+    const parts = [];
+    if (whole) parts.push(String(whole));
+    if (rem) parts.push(FRACS[rem]);
+    return `${parts.join(' ') || '0'} in`;
+  }
+
+  // Converts a length in drawing units to the chosen unit
+  function formatLength(units) {
+    if (gridUnit === 'cm') return (units / PX_PER_INCH * 2.54).toFixed(1) + ' cm';
+    return (units / PX_PER_INCH).toFixed(2) + ' in';
+  }
+
+  function stepGrid(dir) {
+    if (gridUnit === 'in') gridIn = Math.min(4, Math.max(0.125, Math.round((gridIn + dir * 0.125) * 8) / 8));
+    else gridCm = Math.min(10, Math.max(0.5, Math.round((gridCm + dir * 0.5) * 2) / 2));
+    updateGrid();
+    syncGridDrawer();
+    scheduleRender(false);
+  }
+
+  function syncGridDrawer() {
+    $('gridValue').textContent = gridLabel();
+    $('unitInBtn').classList.toggle('active', gridUnit === 'in');
+    $('unitCmBtn').classList.toggle('active', gridUnit === 'cm');
+    $('gridShowBtn').textContent = showGrid ? '▦ Show grid: On' : '▦ Show grid: Off';
+    $('gridShowBtn').classList.toggle('active', showGrid);
+    $('snapBtn').textContent = snap ? '⊞ Snap to grid: On' : '⊞ Snap to grid: Off';
+    $('snapBtn').classList.toggle('active', snap);
+    $('gridBtn').classList.toggle('active', showGrid);
+  }
+
+  function syncDimButtons() {
+    $('dimLiveBtn').textContent = dimLive ? '📏 Dimensions while drawing: On' : '📏 Dimensions while drawing: Off';
+    $('dimLiveBtn').classList.toggle('active', dimLive);
+    $('dimKeepBtn').textContent = dimKeep ? 'Keep dimensions on drawing: On' : 'Keep dimensions on drawing: Off';
+    $('dimKeepBtn').classList.toggle('active', dimKeep);
+  }
+
   // ---------- export ----------
   // Exports visible layers on white, without the grid, selection, or preview
   function exportCanvas() {
@@ -1768,6 +1977,7 @@
 
   function setTool(t) {
     endTextEdit();
+    if (t !== 'measure') measure = null;   // a measurement stays only while the measure tool is in use
     tool = t;
     if (t !== 'select') selected = null;
     syncTools();
@@ -1794,6 +2004,8 @@
       b.classList.toggle('open', b.dataset.drawer === openDrawer);
     });
     if (openDrawer === 'text') syncTextDrawer();
+    if (openDrawer === 'grid') syncGridDrawer();
+    if (openDrawer === 'shapes') syncDimButtons();
   }
 
   document.querySelectorAll('[data-drawer]').forEach(b => {
@@ -1855,22 +2067,15 @@
     e.currentTarget.classList.toggle('active', shapeFilled);
   };
 
-  // View group
-  $('gridBtn').onclick = e => {
-    showGrid = !showGrid;
-    e.currentTarget.classList.toggle('active', showGrid);
-    render();
-  };
-
-  $('snapBtn').onclick = e => {
-    snap = !snap;
-    e.currentTarget.classList.toggle('active', snap);
-  };
-
-  $('gridSpacing').onchange = e => {
-    GRID = Number(e.target.value);
-    scheduleRender(false);
-  };
+  // Grid drawer: shows the grid, sets its spacing and units, and turns snapping on or off
+  $('gridShowBtn').onclick = () => { showGrid = !showGrid; syncGridDrawer(); render(); };
+  $('gridUp').onclick = () => stepGrid(1);
+  $('gridDown').onclick = () => stepGrid(-1);
+  $('unitInBtn').onclick = () => { gridUnit = 'in'; updateGrid(); syncGridDrawer(); scheduleRender(false); };
+  $('unitCmBtn').onclick = () => { gridUnit = 'cm'; updateGrid(); syncGridDrawer(); scheduleRender(false); };
+  $('snapBtn').onclick = () => { snap = !snap; syncGridDrawer(); };
+  $('dimLiveBtn').onclick = () => { dimLive = !dimLive; syncDimButtons(); };
+  $('dimKeepBtn').onclick = () => { dimKeep = !dimKeep; syncDimButtons(); };
 
   $('resetViewBtn').onclick = () => {
     view = { scale: 1, ox: 0, oy: 0 };
@@ -1881,9 +2086,7 @@
   $('undoBtn').onclick = undo;
   $('redoBtn').onclick = redo;
   $('delBtn').onclick = deleteSelected;
-  $('clearBtn').onclick = () => {
-    if (confirm('Clear all layers? You can still undo.')) clearAll();
-  };
+  $('newProjectBtn').onclick = newProject;
   $('saveBtn').onclick = savePNG;
   $('copyBtn').onclick = copyDrawing;
 
