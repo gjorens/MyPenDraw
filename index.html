@@ -47,7 +47,7 @@
   .circle-btn:disabled { opacity: 0.35; }
   .circle-btn:active { background: #e6e6e6; }
   #wlabel { font-size: 15px; font-weight: 600; flex-shrink: 0; }
-  #size { -webkit-appearance: none; appearance: none; width: 220px; height: 30px; flex-shrink: 0; background: transparent; margin: 0; }
+  #size { -webkit-appearance: none; appearance: none; width: min(220px, 16vw); height: 30px; flex-shrink: 0; background: transparent; margin: 0; }
   #size::-webkit-slider-runnable-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
   #size::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
   #size::-moz-range-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
@@ -84,6 +84,20 @@
   .opt-btn.active { background: #dbe7ff; border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
   .opt-row { display: flex; gap: 8px; }
   .opt-row .opt-btn { margin-bottom: 0; }
+
+  .text-box {
+    width: 100%; border: 1.5px solid #7a7a7a; border-radius: 10px; padding: 8px; margin-bottom: 8px;
+    font: 16px/1.4 -apple-system, system-ui, sans-serif; background: #fff; color: #111; resize: vertical;
+  }
+  .bar-btn {
+    height: 46px; min-width: 62px; padding: 0 8px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    font-size: 19px; cursor: pointer; flex-shrink: 0; color: #111;
+  }
+  .bar-btn .cap { font-size: 10px; font-weight: 600; line-height: 1; }
+  .bar-btn:active { background: #e6e6e6; }
+  .bar-btn.open { border: 2.5px solid #111; }
+  .bar-spacer { flex: 1; }
 
   /* ---------- layers panel ---------- */
   #layerPanel {
@@ -132,6 +146,7 @@
       <span id="shapeIcon">▭</span><span class="cap">Shapes</span>
     </button>
     <button class="rail-btn tool-btn" data-tool="fill" id="fillBtn" title="Fill area">🪣<span class="cap">Fill</span></button>
+    <button class="rail-btn tool-btn" data-tool="text" data-drawer="text" id="textBtn" title="Text">T<span class="cap">Text</span></button>
   </div>
 
   <div class="group">
@@ -152,7 +167,6 @@
       <option value="80">80</option>
     </select>
     <button class="rail-btn" id="resetViewBtn" title="Reset zoom">⤢<span class="cap">Zoom 1:1</span></button>
-    <button class="rail-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
   </div>
 
   <div class="group">
@@ -161,18 +175,6 @@
     <button class="rail-btn" id="clearBtn" title="Clear all">🗑<span class="cap">Clear</span></button>
   </div>
 
-  <div class="group">
-    <div class="glabel">File</div>
-    <button class="rail-btn" data-drawer="import" id="importBtn" title="Import pictures">📥<span class="cap">Import</span></button>
-    <button class="rail-btn" id="saveBtn" title="Save PNG">💾<span class="cap">Save</span></button>
-    <button class="rail-btn" id="copyBtn" title="Copy drawing to clipboard">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      <span class="cap">Copy</span>
-    </button>
-  </div>
 </nav>
 
 <!-- Top bar: history and width -->
@@ -192,6 +194,17 @@
   <span id="wlabel">Width</span>
   <input id="size" type="range" min="1" max="30" value="4" title="Width of the active tool">
   <span id="sizeLabel">4</span>
+  <button class="bar-btn" data-drawer="import" id="importBtn" title="Import pictures">📥<span class="cap">Import</span></button>
+  <button class="bar-btn" id="saveBtn" title="Save PNG">💾<span class="cap">Save</span></button>
+  <button class="bar-btn" id="copyBtn" title="Copy drawing to clipboard">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+    <span class="cap">Copy</span>
+  </button>
+  <span class="bar-spacer"></span>
+  <button class="bar-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
 </header>
 
 <!-- Colour drawer -->
@@ -254,6 +267,18 @@
   <p class="hint">SVG files stay sharp when enlarged. Once placed, an imported picture is a single object. Its parts can't be selected separately.</p>
 </aside>
 
+<!-- Text drawer: type words, then tap the canvas to place them -->
+<aside class="drawer" id="drawer-text" aria-label="Text">
+  <h3>Text <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Words</div>
+  <textarea id="textInput" class="text-box" rows="4" maxlength="300" placeholder="Type your text"></textarea>
+  <div class="sub">Size <span id="textSizeLabel">40</span></div>
+  <input id="textSize" type="range" min="12" max="160" value="40" style="width:100%;accent-color:var(--accent)">
+  <div class="sub">Style</div>
+  <button id="textBold" class="opt-btn">B  Bold: Off</button>
+  <p class="hint">Tap the canvas to place the text, in the current colour. It becomes one picture, so you can move, resize and rotate it but not edit the words. To change them, undo and place it again.</p>
+</aside>
+
 <!-- Layers float on the right -->
 <div id="layerPanel" hidden>
   <div class="lp-head">
@@ -271,13 +296,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.11.0</div>
+<div id="version">v0.12.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.11.0';
+  const APP_VERSION = '0.12.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -327,7 +352,8 @@
   const touches = new Map(); // active finger touches, used for pinch
   let gesture = null;        // pinch state
   let rafId = 0, pendingFull = false;
-  let openDrawer = null;     // 'colors' | 'pen' | 'shapes' | 'import' | null
+  let openDrawer = null;     // 'colors' | 'pen' | 'shapes' | 'import' | 'text' | null
+  let textBold = false;      // text tool style
 
   // ---------- custom colours (saved on this device) ----------
   function loadCustom() {
@@ -980,6 +1006,12 @@
       return;
     }
 
+    // Text: one tap places the typed words, centred on the tap point
+    if (tool === 'text') {
+      placeText(raw);
+      return;
+    }
+
     // Fill: one tap paints the area under it, on the active layer
     if (tool === 'fill') {
       pushHistory(snapshot());
@@ -1314,6 +1346,53 @@
     }
   };
 
+  // ---------- text ----------
+  // Renders text to a bitmap at twice the size, so it stays sharp when zoomed.
+  // The result is a picture item, so it moves, resizes and rotates like one.
+  function renderText(text, size, bold, fill) {
+    const K = 2;
+    const font = `${bold ? 'bold ' : ''}${size * K}px -apple-system, system-ui, sans-serif`;
+    const probe = document.createElement('canvas').getContext('2d');
+    probe.font = font;
+    const lines = text.split('\n').slice(0, 20);
+    const lineH = size * K * 1.25;
+    const textW = Math.max(...lines.map(l => probe.measureText(l).width), size * K);
+    const pad = size * K * 0.2;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(textW + pad * 2);
+    c.height = Math.ceil(lineH * lines.length + pad * 2);
+    const cx = c.getContext('2d');
+    cx.font = font;
+    cx.fillStyle = fill;
+    cx.textBaseline = 'top';
+    lines.forEach((l, i) => cx.fillText(l, pad, pad + i * lineH));
+    return { canvas: c, w: c.width / K, h: c.height / K };
+  }
+
+  function placeText(at) {
+    const text = $('textInput').value;
+    if (!text.trim()) { showToast('Type some text in the Text drawer first'); return; }
+    const t = renderText(text.slice(0, 300), Number($('textSize').value), textBold, color);
+    pushHistory(snapshot());
+    const item = { layer: activeLayer, image: t.canvas, cx: at.x, cy: at.y, w: t.w, h: t.h, rot: 0 };
+    strokes = [...strokes, item];
+    selected = item;
+    setTool('select');   // ready to move, resize or rotate straight away
+    openDrawer = null;
+    syncDrawers();
+    redrawInk();
+    renderLayerList();
+    const L = layers.find(l => l.id === activeLayer);
+    if (L && !L.visible) showToast('Text placed on a hidden layer');
+  }
+
+  $('textSize').addEventListener('input', e => { $('textSizeLabel').textContent = e.target.value; });
+  $('textBold').onclick = e => {
+    textBold = !textBold;
+    e.currentTarget.textContent = textBold ? 'B  Bold: On' : 'B  Bold: Off';
+    e.currentTarget.classList.toggle('active', textBold);
+  };
+
   // ---------- export ----------
   // Exports visible layers on white, without the grid, selection, or preview
   function exportCanvas() {
@@ -1380,7 +1459,7 @@
   const sizeLabel = $('sizeLabel');
   // The width slider controls whichever tool is active, with its own range and stored value
   function syncSlider() {
-    size.disabled = tool === 'fill' || tool === 'select';
+    size.disabled = tool === 'fill' || tool === 'select' || tool === 'text';
     if (tool === 'eraser') {
       size.min = 4; size.max = 80; size.value = eraserSize;
       $('wlabel').textContent = 'Eraser width';
@@ -1437,6 +1516,7 @@
       const name = b.dataset.drawer;
       // Opening a drawer for a tool selects that tool
       if (name === 'pen') setTool('pen');
+      if (name === 'text') setTool('text');
       if (name === 'shapes' && !SHAPES.includes(tool)) setTool('rect');
       toggleDrawer(name);
     };
