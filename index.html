@@ -166,6 +166,16 @@
   }
   .choice-btns button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .choice-btns button.danger { color: #b00020; border-color: #b00020; }
+  #calibPanel {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 16;
+    width: min(440px, 92vw); background: #fff; color: #111; border: 2px solid #8a8a8a; border-radius: 14px;
+    padding: 14px; box-shadow: 0 10px 28px rgba(0,0,0,0.3);
+  }
+  #calibPanel[hidden] { display: none; }
+  .calib-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 17px; font-weight: 600; }
+  .calib-row input {
+    flex: 1; height: 48px; border: 1.5px solid #7a7a7a; border-radius: 10px; padding: 0 10px; font-size: 20px;
+  }
 </style>
 </head>
 <body>
@@ -325,7 +335,7 @@
   <button id="calibBtn" class="opt-btn">📏 Calibrate to a known object</button>
   <button id="calibResetBtn" class="opt-btn" hidden>Reset scale</button>
   <p id="scaleInfo" class="hint"></p>
-  <p class="hint">To calibrate, use the Measure tool to draw along a credit card's long edge (3.37 in), open this drawer, and tap Calibrate. Zoom in first for accuracy.</p>
+  <p class="hint">To calibrate, tap Calibrate. A 100 mm ruler appears on the screen. Lay a credit card's long edge along it and type the mm mark where the card ends.</p>
 </aside>
 
 <!-- Eraser drawer -->
@@ -405,18 +415,24 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.22.0</div>
+<div id="version">v0.23.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
   <p class="choice-msg" id="choiceMsg"></p>
   <div class="choice-btns" id="choiceBtns"></div>
 </dialog>
+<!-- Calibration panel: type the reading from the on-screen ruler -->
+<div id="calibPanel" hidden>
+  <p class="choice-msg">Lay a credit card's long edge (85.6 mm) along the ruler on the screen, starting at zero. Type the mm mark where the card ends.</p>
+  <div class="calib-row"><input id="calibInput" type="number" inputmode="decimal" step="0.1" min="30" max="200" placeholder="mm"><span>mm</span></div>
+  <div class="choice-btns"><button id="calibCancel">Cancel</button><button id="calibApply" class="primary">Set scale</button></div>
+</div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.22.0';
+  const APP_VERSION = '0.23.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -477,6 +493,7 @@
   let colorPos = { x: 150, y: 140 };  // top-left of the detached colour window, in CSS pixels
   let colorDrag = null;
   let editIdx = null;        // custom colour being edited (held down), or null
+  let calibMode = false;     // the on-screen calibration ruler is showing
 
   // ---------- custom colours (saved on this device) ----------
   function loadCustom() {
@@ -1030,6 +1047,41 @@
       setTransform(ctx);
       drawMeasure(ctx);
     }
+    if (calibMode) drawCalibRuler(ctx);
+  }
+
+  // The calibration ruler: 100 mm at 96 px per inch, in screen pixels (not drawing units),
+  // so it does not change with zoom. It is never saved with the drawing.
+  function drawCalibRuler(c) {
+    const pxmm = 96 / 25.4, X = 300, Y = 170, L = 100 * pxmm;
+    c.save();
+    c.setTransform(dpr(), 0, 0, dpr(), 0, 0);
+    c.fillStyle = '#ffffff';
+    c.fillRect(X - 8, Y - 26, L + 16, 66);
+    c.strokeStyle = '#111111';
+    c.fillStyle = '#111111';
+    c.lineWidth = 1;
+    c.font = '600 13px -apple-system, system-ui, sans-serif';
+    c.textAlign = 'left';
+    c.fillText('Calibration ruler, mm', X, Y - 10);
+    c.beginPath();
+    c.moveTo(X, Y + 0.5);
+    c.lineTo(X + L, Y + 0.5);
+    c.stroke();
+    for (let m = 0; m <= 100; m++) {
+      const x = Math.round(X + m * pxmm) + 0.5;
+      const len = m % 10 === 0 ? 22 : m % 5 === 0 ? 14 : 8;
+      c.beginPath();
+      c.moveTo(x, Y);
+      c.lineTo(x, Y + len);
+      c.stroke();
+      if (m % 10 === 0) {
+        c.font = '12px -apple-system, system-ui, sans-serif';
+        c.textAlign = 'center';
+        c.fillText(String(m), x, Y + 36);
+      }
+    }
+    c.restore();
   }
 
   // Coalesce redraws to one per animation frame
@@ -1267,6 +1319,7 @@
     e.clientX > window.innerWidth - EDGE_IGNORE_PX || e.clientY > window.innerHeight - EDGE_IGNORE_PX;
 
   canvas.addEventListener('pointerdown', e => {
+    if (calibMode) return;   // the calibration ruler is showing: no drawing
     if (e.pointerType === 'pen') penInUse = true;
 
     if (e.pointerType === 'touch' && startsAtEdge(e)) return;   // not tracked, so it never draws or pinches
@@ -2119,34 +2172,35 @@
     syncScaleText();
     scheduleRender(true);   // dimension labels and the grid use the new scale
   }
-  function calibrateTo(lenPx, inches, label) {
-    const k = lenPx / inches;
-    if (!(k > 20 && k < 400)) { showToast('That length does not match the line'); return; }
-    applyScale(k, label);
-    showToast('Scale calibrated');
+  // Calibration: the on-screen ruler is drawn at a fixed 96 px per inch. A credit card's long
+  // edge is 85.6 mm. If it reads R mm on the ruler, the screen is R/85.6 times the nominal size,
+  // so the true scale is 96 * R / 85.6 px per inch.
+  const CARD_MM = 85.6;
+  function startCalibration() {
+    openDrawer = null;
+    syncDrawers();
+    calibMode = true;
+    $('calibInput').value = '';
+    $('calibPanel').hidden = false;
+    scheduleRender(false);
   }
-  $('calibBtn').onclick = () => {
-    const m = measure;
-    const lenPx = m ? Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y) : 0;
-    if (lenPx < 20) {
-      setTool('measure');
-      showToast('Draw along a known object with the Measure tool, then tap Calibrate');
-      return;
-    }
-    askChoice(`The measured line is ${lenPx.toFixed(0)} units long. What real object is it?`, [
-      { label: 'Cancel' },
-      { label: 'Credit card', cls: 'primary' },
-      { label: 'Other length' }
-    ]).then(choice => {
-      if (choice === 'Credit card') calibrateTo(lenPx, 3.37, 'a credit card (3.37 in)');
-      else if (choice === 'Other length') {
-        const unit = gridUnit === 'cm' ? 'cm' : 'in';
-        const v = parseFloat(prompt(`Real length of the line, in ${unit === 'cm' ? 'centimetres' : 'inches'}:`, ''));
-        if (!(v > 0)) { showToast('Enter a length greater than zero'); return; }
-        calibrateTo(lenPx, unit === 'cm' ? v / 2.54 : v, `a ${v} ${unit} line`);
-      }
-    });
+  function endCalibration() {
+    calibMode = false;
+    $('calibPanel').hidden = true;
+    scheduleRender(false);
+  }
+  $('calibBtn').onclick = startCalibration;
+  $('calibCancel').onclick = endCalibration;
+  $('calibApply').onclick = () => {
+    const reading = parseFloat($('calibInput').value);
+    if (!(reading >= 30 && reading <= 200)) { showToast('Type the mm mark where the card ends'); return; }
+    const pxPerInch = 96 * reading / CARD_MM;
+    if (!(pxPerInch > 20 && pxPerInch < 400)) { showToast('That reading does not look right'); return; }
+    applyScale(pxPerInch, `a credit card (ruler reading ${reading} mm)`);
+    endCalibration();
+    showToast('Scale calibrated');
   };
+  $('calibInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('calibApply').click(); });
   $('calibResetBtn').onclick = () => {
     try { localStorage.removeItem('pendraw-scale'); } catch (e) {}
     applyScale(96, '');
