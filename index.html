@@ -152,6 +152,7 @@
   }
   #toast.show { opacity: 1; }
   .rail-btn, .tool-btn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .opt-btn[hidden] { display: none; }
   #choiceDialog {
     border: 2px solid #8a8a8a; border-radius: 14px; padding: 18px; width: min(360px, 88vw);
     background: #fff; color: #111; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
@@ -320,7 +321,11 @@
   </div>
   <div class="sub">Snapping</div>
   <button id="snapBtn" class="opt-btn">⊞ Snap to grid: Off</button>
-  <p class="hint">Spacing uses 96 drawing units per inch. Dimensions and measurements use the same unit. Screen scale varies between iPad models, so a printed inch may not match exactly.</p>
+  <div class="sub">Scale</div>
+  <button id="calibBtn" class="opt-btn">📏 Calibrate to a known object</button>
+  <button id="calibResetBtn" class="opt-btn" hidden>Reset scale</button>
+  <p id="scaleInfo" class="hint"></p>
+  <p class="hint">To calibrate, use the Measure tool to draw along a credit card's long edge (3.37 in), open this drawer, and tap Calibrate. Zoom in first for accuracy.</p>
 </aside>
 
 <!-- Eraser drawer -->
@@ -397,7 +402,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.20.2</div>
+<div id="version">v0.21.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -408,7 +413,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.20.2';
+  const APP_VERSION = '0.21.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2050,7 +2055,16 @@
   });
 
   // ---------- grid, units, dimensions and measuring ----------
-  const PX_PER_INCH = 96;   // drawing units per inch, the usual screen convention
+  // Drawing units per inch: 96 by default, or the value set by calibration (kept on this device)
+  let PX_PER_INCH = 96;
+  let scaleLabel = '';
+  try {
+    const sc = JSON.parse(localStorage.getItem('pendraw-scale') || 'null');
+    if (sc && Number.isFinite(sc.pxPerInch) && sc.pxPerInch > 20 && sc.pxPerInch < 400) {
+      PX_PER_INCH = sc.pxPerInch;
+      scaleLabel = sc.label || '';
+    }
+  } catch (e) {}
   let gridUnit = 'in';      // 'in' or 'cm': used for the grid, dimensions and measurements
   let gridIn = 0.5;         // grid spacing in inches, in steps of 1/8
   let gridCm = 1;           // grid spacing in centimetres, in steps of 0.5
@@ -2084,6 +2098,58 @@
     if (gridUnit === 'cm') return (units / PX_PER_INCH * 2.54).toFixed(1) + ' cm';
     return (units / PX_PER_INCH).toFixed(2) + ' in';
   }
+
+  // ---------- scale calibration ----------
+  function syncScaleText() {
+    const calibrated = PX_PER_INCH !== 96 || !!scaleLabel;
+    $('scaleInfo').textContent = calibrated
+      ? `Scale calibrated to ${scaleLabel || 'a known length'} (${PX_PER_INCH.toFixed(1)} drawing units per inch).`
+      : 'Scale not calibrated: 96 drawing units per inch. Screen size varies between iPads, so printed sizes are approximate.';
+    $('calibResetBtn').hidden = !calibrated;
+  }
+  function applyScale(pxPerInch, label) {
+    PX_PER_INCH = pxPerInch;
+    scaleLabel = label;
+    try { localStorage.setItem('pendraw-scale', JSON.stringify({ pxPerInch, label })); } catch (e) {}
+    updateGrid();
+    syncGridDrawer();
+    syncScaleText();
+    scheduleRender(true);   // dimension labels and the grid use the new scale
+  }
+  function calibrateTo(lenPx, inches, label) {
+    const k = lenPx / inches;
+    if (!(k > 20 && k < 400)) { showToast('That length does not match the line'); return; }
+    applyScale(k, label);
+    showToast('Scale calibrated');
+  }
+  $('calibBtn').onclick = () => {
+    const m = measure;
+    const lenPx = m ? Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y) : 0;
+    if (lenPx < 20) {
+      setTool('measure');
+      showToast('Draw along a known object with the Measure tool, then tap Calibrate');
+      return;
+    }
+    askChoice(`The measured line is ${lenPx.toFixed(0)} units long. What real object is it?`, [
+      { label: 'Cancel' },
+      { label: 'Credit card', cls: 'primary' },
+      { label: 'Other length' }
+    ]).then(choice => {
+      if (choice === 'Credit card') calibrateTo(lenPx, 3.37, 'a credit card (3.37 in)');
+      else if (choice === 'Other length') {
+        const unit = gridUnit === 'cm' ? 'cm' : 'in';
+        const v = parseFloat(prompt(`Real length of the line, in ${unit === 'cm' ? 'centimetres' : 'inches'}:`, ''));
+        if (!(v > 0)) { showToast('Enter a length greater than zero'); return; }
+        calibrateTo(lenPx, unit === 'cm' ? v / 2.54 : v, `a ${v} ${unit} line`);
+      }
+    });
+  };
+  $('calibResetBtn').onclick = () => {
+    try { localStorage.removeItem('pendraw-scale'); } catch (e) {}
+    applyScale(96, '');
+    showToast('Scale reset to default');
+  };
+  syncScaleText();
 
   function stepGrid(dir) {
     if (gridUnit === 'in') gridIn = Math.min(4, Math.max(0.125, Math.round((gridIn + dir * 0.125) * 8) / 8));
@@ -2228,7 +2294,7 @@
     $('drawer-colors').classList.toggle('open', colorOn);
     $('colorBtn').classList.toggle('open', colorOn);
     if (openDrawer === 'text') syncTextDrawer();
-    if (openDrawer === 'grid') syncGridDrawer();
+    if (openDrawer === 'grid') { syncGridDrawer(); syncScaleText(); }
     if (openDrawer === 'shapes') syncDimButtons();
   }
 
