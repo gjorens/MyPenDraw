@@ -271,13 +271,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.10.1</div>
+<div id="version">v0.11.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.10.1';
+  const APP_VERSION = '0.11.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -393,6 +393,23 @@
     return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => localToWorld(s, a * s.w / 2, b * s.h / 2));
   }
 
+  // Frame items are pictures, rectangles and ovals. They rotate about their centre.
+  // For a rectangle or oval the centre is the midpoint of its two defining points.
+  const isFrame = s => !!s.image || s.shape === 'rect' || s.shape === 'oval';
+  function frameOf(s) {
+    if (s.image) return s;
+    const [a, b] = s.points;
+    return { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y), rot: s.rot || 0 };
+  }
+  function applyFrame(s, f) {
+    if (s.image) return { ...s, cx: f.cx, cy: f.cy, w: f.w, h: f.h, rot: f.rot };
+    return {
+      ...s,
+      rot: f.rot,
+      points: [{ x: f.cx - f.w / 2, y: f.cy - f.h / 2, p: 0.5 }, { x: f.cx + f.w / 2, y: f.cy + f.h / 2, p: 0.5 }]
+    };
+  }
+
   // Bounding box of an item's points (no stroke width)
   function rawBox(s) {
     const pts = s.image ? pictureCorners(s) : s.points;
@@ -472,11 +489,19 @@
   function drawShape(c, s) {
     c.save();
     styleFor(c, s);
+    let target = s;
+    if (isFrame(s) && s.rot) {
+      // A rotated rectangle or oval is drawn in its own frame, centred on the origin
+      const f = frameOf(s);
+      c.translate(f.cx, f.cy);
+      c.rotate(f.rot);
+      target = { ...s, points: [{ x: -f.w / 2, y: -f.h / 2 }, { x: f.w / 2, y: f.h / 2 }] };
+    }
     if (s.filled) {
-      shapePath(c, s, true);
+      shapePath(c, target, true);
       c.fill();
     }
-    shapePath(c, s, false);
+    shapePath(c, target, false);
     c.lineWidth = s.size;
     c.stroke();
     c.restore();
@@ -592,8 +617,9 @@
     c.fillStyle = '#ffffff';
     c.lineWidth = 2 / s;
     const h = 7 / s;
-    if (selected.image) {
-      const pts = pictureCorners(selected);
+    if (isFrame(selected)) {
+      const f = frameOf(selected);
+      const pts = pictureCorners(f);
       c.lineWidth = 1.5 / s;
       c.setLineDash([6 / s, 4 / s]);
       c.beginPath();
@@ -602,7 +628,7 @@
       c.stroke();
       c.setLineDash([]);
       const top = mid(pts[0], pts[1]);
-      const rot = localToWorld(selected, 0, -selected.h / 2 - 30 / s);
+      const rot = localToWorld(f, 0, -f.h / 2 - 30 / s);
       c.beginPath();
       c.moveTo(top.x, top.y);
       c.lineTo(rot.x, rot.y);
@@ -632,6 +658,17 @@
         c.fill();
         c.stroke();
       }
+      // Rotate handle above the box, for strokes and arcs
+      const top = { x: (b.x0 + b.x1) / 2, y: b.y0 - pad };
+      const rp = { x: top.x, y: top.y - 30 / s };
+      c.beginPath();
+      c.moveTo(top.x, top.y);
+      c.lineTo(rp.x, rp.y);
+      c.stroke();
+      c.beginPath();
+      c.arc(rp.x, rp.y, 7 / s, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
     }
     c.restore();
   }
@@ -731,9 +768,9 @@
       if (s.fill) continue;
       const L = layers.find(l => l.id === s.layer);
       if (!L || !L.visible) continue;
-      if (s.image) {
-        const q = worldToLocal(s, pt);
-        if (Math.abs(q.x) <= s.w / 2 + tol && Math.abs(q.y) <= s.h / 2 + tol) return s;
+      if (isFrame(s)) {
+        const f = frameOf(s), q = worldToLocal(f, pt), pad = (s.size || 0) / 2 + tol;
+        if (Math.abs(q.x) <= f.w / 2 + pad && Math.abs(q.y) <= f.h / 2 + pad) return s;
       } else if (s.shape) {
         const b = rawBox(s), pad = (s.size || 0) / 2 + tol;
         if (pt.x >= b.x0 - pad && pt.x <= b.x1 + pad && pt.y >= b.y0 - pad && pt.y <= b.y1 + pad) return s;
@@ -751,11 +788,12 @@
   function handleAt(pt) {
     if (!selected) return null;
     const s = view.scale, r = 14 / s;
-    if (selected.image) {
-      const rp = localToWorld(selected, 0, -selected.h / 2 - 30 / s);
+    if (isFrame(selected)) {
+      const f = frameOf(selected);
+      const rp = localToWorld(f, 0, -f.h / 2 - 30 / s);
       if (Math.hypot(rp.x - pt.x, rp.y - pt.y) <= r) return { kind: 'rotate' };
       for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-        const p = localToWorld(selected, sx * selected.w / 2, sy * selected.h / 2);
+        const p = localToWorld(f, sx * f.w / 2, sy * f.h / 2);
         if (Math.abs(p.x - pt.x) <= r && Math.abs(p.y - pt.y) <= r) return { kind: 'resize', sx, sy };
       }
       return null;
@@ -767,6 +805,8 @@
       { x: b.x0, y: b.y1, anchor: { x: b.x1, y: b.y0 } },
       { x: b.x1, y: b.y1, anchor: { x: b.x0, y: b.y0 } }
     ];
+    const rp = { x: (b.x0 + b.x1) / 2, y: b.y0 - (selected.size || 0) / 2 - 3 / s - 30 / s };
+    if (Math.hypot(rp.x - pt.x, rp.y - pt.y) <= r) return { kind: 'rotate' };
     const c = corners.find(c => Math.abs(c.x - pt.x) <= r && Math.abs(c.y - pt.y) <= r);
     return c ? { kind: 'resize', anchor: c.anchor } : null;
   }
@@ -781,8 +821,8 @@
       handle,
       anchor: handle && handle.anchor ? handle.anchor : null
     };
-    if (item.image) {
-      drag.orig = { cx: item.cx, cy: item.cy, w: item.w, h: item.h, rot: item.rot };
+    if (isFrame(item)) {
+      drag.orig = { ...frameOf(item) };
     } else {
       drag.orig = item.points.map(p => ({ ...p }));
       drag.box = rawBox(item);
@@ -790,7 +830,7 @@
   }
 
   function updateDrag(q) {
-    if (drag.ref.image) { updatePictureDrag(q); return; }
+    if (isFrame(drag.ref)) { updatePictureDrag(q); return; }
     const d = drag, b = d.box;
     let fn;
     if (d.kind === 'move') {
@@ -800,6 +840,13 @@
         dy = Math.round((b.y0 + dy) / GRID) * GRID - b.y0;
       }
       fn = p => ({ x: p.x + dx, y: p.y + dy });
+    } else if (d.kind === 'rotate') {
+      // Freehand strokes and arcs turn their points about the centre of their box
+      const C = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+      let ang = Math.atan2(q.y - C.y, q.x - C.x) - Math.atan2(d.start.y - C.y, d.start.x - C.x);
+      if (snap) { const step = Math.PI / 12; ang = Math.round(ang / step) * step; }
+      const co = Math.cos(ang), si = Math.sin(ang);
+      fn = p => ({ x: C.x + (p.x - C.x) * co - (p.y - C.y) * si, y: C.y + (p.x - C.x) * si + (p.y - C.y) * co });
     } else {
       const t = snap ? snapPt(q) : q;
       const nb = box(d.anchor, t);
@@ -822,11 +869,11 @@
     if (d.kind === 'move') {
       let cx = o.cx + (q.x - d.start.x), cy = o.cy + (q.y - d.start.y);
       if (snap) { cx = Math.round(cx / GRID) * GRID; cy = Math.round(cy / GRID) * GRID; }
-      item = { ...ref, cx, cy };
+      item = applyFrame(ref, { ...o, cx, cy });
     } else if (d.kind === 'rotate') {
-      let rot = Math.atan2(q.y - o.cy, q.x - o.cx) + Math.PI / 2;
+      let rot = o.rot + Math.atan2(q.y - o.cy, q.x - o.cx) - Math.atan2(d.start.y - o.cy, d.start.x - o.cx);
       if (snap) { const step = Math.PI / 12; rot = Math.round(rot / step) * step; }   // 15 degree steps
-      item = { ...ref, rot };
+      item = applyFrame(ref, { ...o, rot });
     } else {
       const { sx, sy } = d.handle;
       const src = { cx: o.cx, cy: o.cy, w: o.w, h: o.h, rot: o.rot };
@@ -838,7 +885,7 @@
       const w = Math.max(4, sx * lx), h = Math.max(4, sy * ly);
       const cx = F.x + (sx * w / 2) * c - (sy * h / 2) * sn;
       const cy = F.y + (sx * w / 2) * sn + (sy * h / 2) * c;
-      item = { ...ref, cx, cy, w, h };
+      item = applyFrame(ref, { cx, cy, w, h, rot: o.rot });
     }
     strokes = d.before.items.map(s => (s === ref ? item : s));
     selected = item;
