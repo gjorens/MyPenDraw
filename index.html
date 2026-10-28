@@ -79,13 +79,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.2.2</div>
+<div id="version">v0.2.3</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.2.2';
+  const APP_VERSION = '0.2.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const canvas = document.getElementById('c');
@@ -122,19 +122,27 @@
     return Math.max(0.5, stroke.size * factor);
   }
 
-  // Draw one smooth segment between the last two points using midpoint quadratic curves
+  // Midpoint smoothing: each curve runs from the midpoint before point i-1 to the
+  // midpoint after it, with point i-1 as the control. The first and last curves
+  // reach the real first and last points, so no gaps appear, even on quick strokes.
+  function mid(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
   function drawSegment(stroke, pts, i) {
-    const a = pts[i - 1], b = pts[i];
-    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const n = pts.length;
+    const start = i === 1 ? pts[0] : mid(pts[i - 2], pts[i - 1]);
+    const control = pts[i - 1];
+    const end = i === n - 1 ? pts[i] : mid(pts[i - 1], pts[i]);
     ctx.save();
     ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
     ctx.strokeStyle = stroke.color;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = widthFor(stroke, (a.p + b.p) / 2);
+    ctx.lineWidth = widthFor(stroke, (pts[i - 1].p + pts[i].p) / 2);
     ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(a.x, a.y, mid.x, mid.y);
+    ctx.moveTo(start.x, start.y);
+    ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
     ctx.stroke();
     ctx.restore();
   }
