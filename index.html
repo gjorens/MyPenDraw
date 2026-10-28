@@ -85,6 +85,12 @@
   .opt-row { display: flex; gap: 8px; }
   .opt-row .opt-btn { margin-bottom: 0; justify-content: center; }
 
+  .ai-input, .ai-box {
+    width: 100%; border: 1.5px solid #7a7a7a; border-radius: 10px; padding: 8px;
+    font: 15px/1.4 -apple-system, system-ui, sans-serif; background: #fff; color: #111; margin-bottom: 8px;
+  }
+  .ai-box { font-size: 13px; resize: vertical; }
+
   /* ---------- layers panel ---------- */
   #layerPanel {
     position: fixed; top: calc(var(--bar-h) + 8px); right: 10px; width: 310px; max-height: 65vh; overflow-y: auto;
@@ -162,6 +168,7 @@
 
   <div class="group">
     <div class="glabel">File</div>
+    <button class="rail-btn" data-drawer="ai" id="aiBtn" title="AI drawing">✨<span class="cap">AI</span></button>
     <button class="rail-btn" id="saveBtn" title="Save PNG">💾<span class="cap">Save</span></button>
     <button class="rail-btn" id="copyBtn" title="Copy drawing to clipboard">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -239,6 +246,24 @@
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved.</p>
 </aside>
 
+<!-- AI drawer: build a request to copy into chat, then paste the JSON reply back -->
+<aside class="drawer" id="drawer-ai" aria-label="AI drawing">
+  <h3>AI drawing <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">1. Describe the drawing</div>
+  <input id="aiSubject" class="ai-input" type="text" maxlength="200" placeholder="e.g. a dog with a red ribbon on its head">
+  <div class="sub">2. Copy the request into chat</div>
+  <textarea id="aiRequest" class="ai-box" rows="9" readonly></textarea>
+  <button id="aiCopyRequest" class="opt-btn">Copy request</button>
+  <div class="sub">3. Paste the JSON reply here</div>
+  <textarea id="aiPaste" class="ai-box" rows="5" placeholder="Paste the chat reply here"></textarea>
+  <div class="opt-row">
+    <button id="aiPasteBtn" class="opt-btn">Paste</button>
+    <button id="aiDraw" class="opt-btn">Draw</button>
+  </div>
+  <p id="aiMsg" class="hint" role="alert"></p>
+  <p class="hint">Shapes go on the active layer as one undo step.</p>
+</aside>
+
 <!-- Colour swatches are shown in the drawer; layers float on the right -->
 <div id="layerPanel" hidden>
   <div class="lp-head">
@@ -256,13 +281,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.7.0</div>
+<div id="version">v0.8.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.7.0';
+  const APP_VERSION = '0.8.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1042,6 +1067,152 @@
     redrawInk();
   };
 
+  // ---------- AI: request text and JSON import ----------
+  const SHAPE_KINDS = ['rect', 'oval', 'arc'];
+  const MAX_AI_ITEMS = 300;
+
+  // Builds the chat request from the app's current settings, so the wording and
+  // the allowed colours always match what the app can import
+  function buildInstruction(subject) {
+    const fixed = [['Black', '#111111'], ['Red', '#e03131'], ['Blue', '#1c7ed6'],
+                   ['Green', '#2f9e44'], ['Orange', '#f08c00'], ['Purple', '#7048e8']];
+    const palette = [
+      ...fixed.map(([n, c]) => `${n} ${c}`),
+      ...customColors.map((c, i) => `Custom ${i + 1} ${c}`)
+    ].join(', ');
+    const W = Math.round(canvas.clientWidth), H = Math.round(canvas.clientHeight);
+    return [
+      'Return only one JSON object, with no text before or after it, in this format:',
+      '',
+      '{"items":[{"shape":"rect" | "oval" | "arc","color":"#rrggbb","size":1-30,"filled":true | false,"bulge":"left" | "right","points":[{"x":0,"y":0},{"x":0,"y":0}]}]}',
+      '',
+      `The drawing area is ${W} x ${H} units. (0, 0) is the top-left corner. x increases to the right and y increases downward.`,
+      '',
+      'Shapes:',
+      '- rect: points are two opposite corners.',
+      '- oval: points are two opposite corners of the box the oval fits in.',
+      '- arc: a half circle. points[0] is where the pen goes down and points[1] is where it lifts. The arc is the half circle between those two points.',
+      '- bulge sets which side the arc curves toward, judged while moving from points[0] to points[1] as seen on screen.',
+      '  "right" bulges to the right-hand side. From left to right it bulges downward, so a smile is "right".',
+      '  "left" bulges to the left-hand side. From left to right it bulges upward, so a frown is "left".',
+      '  bulge is ignored for rect and oval.',
+      '',
+      'Other rules:',
+      '- size is the line width. Use 2 to 6 for outlines and larger for bold strokes.',
+      '- filled true fills the shape with its colour. false draws the outline only.',
+      `- color must be one of these: ${palette}.`,
+      `- Use at most ${MAX_AI_ITEMS} items. Build the drawing from simple shapes placed carefully.`,
+      '',
+      `Draw: ${subject || '(describe what to draw here)'}`
+    ].join('\n');
+  }
+
+  function refreshRequest() {
+    $('aiRequest').value = buildInstruction($('aiSubject').value.trim());
+  }
+
+  // Accepts the whole chat reply, including any code fences around the JSON
+  function parseAiJson(text) {
+    const s = text.trim();
+    const first = s.indexOf('{'), last = s.lastIndexOf('}');
+    if (first < 0 || last <= first) throw new Error('No JSON found. Paste the whole reply from chat.');
+    let data;
+    try { data = JSON.parse(s.slice(first, last + 1)); }
+    catch (e) { throw new Error('The JSON is not valid: ' + e.message); }
+    if (!data || !Array.isArray(data.items)) throw new Error('The JSON needs an "items" list.');
+    if (data.items.length === 0) throw new Error('The "items" list is empty.');
+    if (data.items.length > MAX_AI_ITEMS) throw new Error(`Too many items (${data.items.length}). The limit is ${MAX_AI_ITEMS}.`);
+
+    return data.items.map((it, i) => {
+      const n = i + 1;
+      if (!it || typeof it !== 'object') throw new Error(`Item ${n} is not an object.`);
+      if (!SHAPE_KINDS.includes(it.shape)) throw new Error(`Item ${n}: shape must be rect, oval or arc.`);
+      if (typeof it.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(it.color)) {
+        throw new Error(`Item ${n}: colour must look like #rrggbb.`);
+      }
+      const size = Number(it.size ?? 4);
+      if (!Number.isFinite(size)) throw new Error(`Item ${n}: size must be a number.`);
+      if (!Array.isArray(it.points) || it.points.length !== 2) {
+        throw new Error(`Item ${n}: points needs exactly two {x, y} entries.`);
+      }
+      const pts = it.points.map(p => ({ x: Number(p?.x), y: Number(p?.y) }));
+      if (pts.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
+        throw new Error(`Item ${n}: x and y must be numbers.`);
+      }
+      return {
+        shape: it.shape,
+        color: it.color,
+        size: Math.min(30, Math.max(1, size)),
+        filled: it.filled === true,
+        // "right" maps to side 1 and "left" to side -1, matching the hand-drawn arc
+        side: it.bulge === 'left' ? -1 : 1,
+        points: pts.map(p => ({ ...p, p: 0.5 }))
+      };
+    });
+  }
+
+  function drawAiItems(items) {
+    pushHistory(snapshot());
+    strokes = [...strokes, ...items.map(it => ({ ...it, layer: activeLayer }))];
+    selected = null;
+    redrawInk();
+    const L = layers.find(l => l.id === activeLayer);
+    showToast(L && !L.visible
+      ? `Added ${items.length} shapes to a hidden layer`
+      : `Added ${items.length} shapes`);
+  }
+
+  function setAiMsg(msg) { $('aiMsg').textContent = msg; }
+
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    ta.remove();
+    if (ok) done(); else showToast('Copy failed. Select the text and copy it.');
+  }
+
+  function copyText(text, okMsg) {
+    const done = () => showToast(okMsg);
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  $('aiSubject').addEventListener('input', refreshRequest);
+  $('aiCopyRequest').onclick = () => {
+    refreshRequest();
+    copyText($('aiRequest').value, 'Request copied. Paste it into chat.');
+  };
+  $('aiPasteBtn').onclick = async () => {
+    try {
+      $('aiPaste').value = await navigator.clipboard.readText();
+      setAiMsg('');
+    } catch (e) {
+      setAiMsg('Tap the box and paste there.');
+      $('aiPaste').focus();
+    }
+  };
+  $('aiDraw').onclick = () => {
+    try {
+      const items = parseAiJson($('aiPaste').value);
+      drawAiItems(items);
+      $('aiPaste').value = '';
+      setAiMsg('');
+    } catch (e) {
+      setAiMsg(e.message);
+    }
+  };
+
   // ---------- export ----------
   // Exports visible layers on white, without the grid, selection, or preview
   function exportCanvas() {
@@ -1155,6 +1326,7 @@
     document.querySelectorAll('.drawer').forEach(d => {
       d.classList.toggle('open', d.id === 'drawer-' + openDrawer);
     });
+    if (openDrawer === 'ai') refreshRequest();   // rebuild so colours and canvas size are current
     document.querySelectorAll('[data-drawer]').forEach(b => {
       b.classList.toggle('open', b.dataset.drawer === openDrawer);
     });
