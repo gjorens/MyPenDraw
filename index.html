@@ -10,42 +10,43 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <meta name="apple-mobile-web-app-title" content="Pen Draw">
 <style>
-  :root { --bar-h: 56px; }
+  :root { --bar-h: 60px; --accent: #2f5fd6; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f4f1; font-family: -apple-system, system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f4f1; font-family: -apple-system, system-ui, sans-serif; color: #111; }
 
   #toolbar {
     position: fixed; top: 0; left: 0; right: 0; height: var(--bar-h);
     display: flex; align-items: center; gap: 10px; padding: 0 12px;
-    background: rgba(255,255,255,0.95); border-bottom: 1px solid #ddd;
+    background: #ffffff; border-bottom: 2px solid #b8b8b8;
     overflow-x: auto; z-index: 10;
   }
   #toolbar button {
-    min-width: 40px; height: 40px; border-radius: 10px; border: 1px solid #ccc;
-    background: #fff; font-size: 16px; cursor: pointer; flex-shrink: 0;
+    min-width: 42px; height: 42px; border-radius: 10px; border: 1.5px solid #8a8a8a;
+    background: #ffffff; color: #111; font-size: 17px; cursor: pointer; flex-shrink: 0;
   }
-  #toolbar button.active { outline: 3px solid #4a7dff; outline-offset: 1px; }
+  #toolbar button.active { background: #dbe7ff; border-color: var(--accent); outline: 3px solid var(--accent); outline-offset: 1px; }
   #toolbar button:disabled { opacity: 0.35; }
-  #toolbar button.text-btn { font-size: 15px; padding: 0 10px; }
-  .swatch { width: 28px !important; min-width: 28px !important; height: 28px !important; border-radius: 50% !important; padding: 0; }
-  #colorPick { width: 40px; height: 40px; padding: 3px; border: 1px solid #ccc; border-radius: 10px; background: #fff; flex-shrink: 0; cursor: pointer; }
-  .sep { width: 1px; height: 28px; background: #ddd; flex-shrink: 0; }
-  #size { width: 110px; flex-shrink: 0; }
+  #toolbar button.text-btn { font-size: 15px; font-weight: 600; padding: 0 10px; }
+  .swatch { width: 30px !important; min-width: 30px !important; height: 30px !important; border-radius: 50% !important; padding: 0; border: 2px solid #fff !important; box-shadow: 0 0 0 1.5px #8a8a8a; }
+  .swatch.active { box-shadow: 0 0 0 3px var(--accent); }
+  #colorPick { width: 42px; height: 42px; padding: 3px; border: 1.5px solid #8a8a8a; border-radius: 10px; background: #fff; flex-shrink: 0; cursor: pointer; }
+  .sep { width: 2px; height: 30px; background: #b0b0b0; flex-shrink: 0; }
+  #size { width: 150px; height: 30px; flex-shrink: 0; accent-color: var(--accent); }
   #size:disabled { opacity: 0.35; }
-  #sizeLabel { font-size: 13px; color: #555; min-width: 24px; flex-shrink: 0; }
+  #sizeLabel { font-size: 16px; font-weight: 700; color: #111; min-width: 30px; text-align: center; flex-shrink: 0; }
 
   #stage { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
 
   #version {
     position: fixed; right: 10px; bottom: 8px; z-index: 10;
-    font-size: 12px; color: #666; background: rgba(255,255,255,0.8);
-    padding: 3px 8px; border-radius: 6px; pointer-events: none;
+    font-size: 13px; font-weight: 600; color: #222; background: #fff;
+    border: 1px solid #999; padding: 3px 9px; border-radius: 6px; pointer-events: none;
   }
   #toast {
     position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
     background: #222; color: #fff; padding: 8px 14px; border-radius: 8px;
-    font-size: 14px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 20;
+    font-size: 15px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 20;
   }
   #toast.show { opacity: 1; }
 </style>
@@ -53,20 +54,21 @@
 <body>
 
 <div id="toolbar">
+  <button id="selectBtn" data-group="tool" title="Select, move, and resize">↖</button>
   <button id="penBtn" class="active" data-group="tool" title="Pen">✏️</button>
   <button id="eraserBtn" data-group="tool" title="Eraser">🧽</button>
   <button id="rectBtn" data-group="tool" title="Rectangle">▭</button>
   <button id="ovalBtn" data-group="tool" title="Oval">○</button>
-  <button id="arcBtn" data-group="tool" title="Arc">◠</button>
+  <button id="arcBtn" data-group="tool" title="Arc: drag from one end to the other">◠</button>
   <button id="fillBtn" class="text-btn" data-group="tool" title="Fill area">Fill</button>
   <div class="sep"></div>
   <input id="colorPick" type="color" value="#111111" title="Pick any color">
-  <button class="swatch active" data-group="color" data-color="#111111" style="background:#111"></button>
-  <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131"></button>
-  <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6"></button>
-  <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44"></button>
-  <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00"></button>
-  <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8"></button>
+  <button class="swatch active" data-group="color" data-color="#111111" style="background:#111" title="Black"></button>
+  <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131" title="Red"></button>
+  <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6" title="Blue"></button>
+  <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
+  <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
+  <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
   <div class="sep"></div>
   <input id="size" type="range" min="1" max="30" value="4" title="Brush, eraser, or outline width">
   <span id="sizeLabel">4</span>
@@ -74,15 +76,17 @@
   <button id="solidBtn" title="Filled shapes">■</button>
   <button id="curveBtn" class="text-btn active" data-group="mode" title="Smooth curves">Curve</button>
   <button id="lineBtn" class="text-btn" data-group="mode" title="Straight lines">Line</button>
-  <button id="gridBtn" title="Toggle grid">▦</button>
+  <button id="gridBtn" title="Show grid">▦</button>
+  <button id="snapBtn" title="Snap to grid">⊞</button>
   <button id="resetViewBtn" class="text-btn" title="Reset zoom">1:1</button>
   <div class="sep"></div>
   <button id="undoBtn" title="Undo" disabled>↶</button>
   <button id="redoBtn" title="Redo" disabled>↷</button>
-  <button id="clearBtn" title="Clear">🗑</button>
+  <button id="delBtn" title="Delete selected" disabled>⌫</button>
+  <button id="clearBtn" title="Clear all">🗑</button>
   <button id="saveBtn" title="Save PNG">💾</button>
   <button id="copyBtn" title="Copy drawing to clipboard" aria-label="Copy drawing to clipboard">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
     </svg>
@@ -93,44 +97,50 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.4.0</div>
+<div id="version">v0.5.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.4.0';
+  const APP_VERSION = '0.5.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
   const canvas = $('c');
   const ctx = canvas.getContext('2d');
-  // Committed strokes, shapes, and fills are drawn here, without the grid,
-  // so the eraser only cuts ink and the grid never gets filled over.
+  // Committed items are drawn here, without the grid, so the eraser only cuts ink
+  // and the grid never gets painted over.
   const ink = document.createElement('canvas');
   const ictx = ink.getContext('2d');
 
-  const GRID = 40;                       // grid spacing in drawing units
+  const GRID = 40;                       // grid spacing and snap step, in drawing units
   const MIN_SCALE = 0.5, MAX_SCALE = 6;
   const SHAPES = ['rect', 'oval', 'arc'];
+  const HISTORY_LIMIT = 200;
   const dpr = () => window.devicePixelRatio || 1;
 
   // ---------- state ----------
-  // Committed items, in order. Each is one of:
+  // Items, in drawing order. Each is one of:
   //   freehand/line: {color, size, eraser, straight, pointerType, points:[{x,y,p}]}
   //   shape:         {shape:'rect'|'oval'|'arc', color, size, filled, points:[a,b]}
-  //   fill:          {fill:true, color, x, y}   (x, y in drawing units)
+  //   fill:          {fill:true, color, x, y}  (not selectable)
+  // Items are never edited in place; changes create new objects. That lets
+  // history be a simple list of previous item arrays.
   let strokes = [];
-  let redoStack = [];
-  let current = null;        // item in progress
-  let preview = null;        // straight line or shape being dragged (not yet committed)
-  let tool = 'pen';          // 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
+  let undoStack = [], redoStack = [];
+  let current = null;        // item being drawn
+  let preview = null;        // line or shape being dragged out (not yet committed)
+  let selected = null;       // selected item
+  let drag = null;           // move or resize in progress
+  let tool = 'pen';          // 'select' | 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
   let mode = 'curve';        // 'curve' | 'line' (pen only)
   let color = '#111111';
   let penSize = 4;
   let eraserSize = 24;
   let shapeFilled = false;
   let showGrid = false;
+  let snap = false;
   let penInUse = false;      // once the Pencil is used, finger touches are ignored for drawing
   let activePointerId = null;
   let view = { scale: 1, ox: 0, oy: 0 };  // zoom and pan, in CSS pixels
@@ -148,16 +158,34 @@
   }
   window.addEventListener('resize', resize);
 
-  // ---------- drawing ----------
+  // ---------- geometry helpers ----------
   function setTransform(c) {
     const d = dpr(), s = view.scale;
     c.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
   }
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const box = (a, b) => ({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
+  const snapPt = p => ({ ...p, x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID });
 
-  function mid(a, b) {
-    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  // Bounding box of an item's points (no stroke width)
+  function rawBox(s) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of s.points) {
+      x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+      x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+    }
+    return { x0, y0, x1, y1 };
   }
 
+  function distSeg(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+
+  // ---------- drawing ----------
   function widthFor(stroke, p) {
     if (stroke.eraser) return stroke.size;
     return Math.max(0.5, stroke.size * (0.4 + p * 1.2));
@@ -188,17 +216,23 @@
     c.restore();
   }
 
-  // Builds the path for a rectangle, oval, or top-half arc inside the dragged box.
+  // Rectangle, oval, or arc. The arc is a half circle that runs from the pen-down
+  // point to the pen-up point; the side it bulges to follows the drag direction.
   function shapePath(c, s, closed) {
     const [a, b] = s.points;
-    const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
-    const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
     c.beginPath();
-    if (s.shape === 'rect') { c.rect(x, y, w, h); return; }
-    const cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2;
-    if (s.shape === 'oval') { c.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); return; }
-    c.ellipse(cx, cy, rx, ry, 0, Math.PI, Math.PI * 2);   // top half of the box
-    if (closed) c.closePath();                              // closes the arc with a chord
+    if (s.shape === 'arc') {
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      const r = Math.hypot(b.x - a.x, b.y - a.y) / 2;
+      const th = Math.atan2(a.y - cy, a.x - cx);
+      c.arc(cx, cy, r, th, th + Math.PI, false);
+      if (closed) c.closePath();   // closing chord from b back to a
+      return;
+    }
+    const bx = box(a, b);
+    const w = bx.x1 - bx.x0, h = bx.y1 - bx.y0;
+    if (s.shape === 'rect') { c.rect(bx.x0, bx.y0, w, h); return; }
+    c.ellipse(bx.x0 + w / 2, bx.y0 + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
   }
 
   function drawShape(c, s) {
@@ -241,8 +275,8 @@
     for (let i = 1; i < pts.length; i++) drawSegment(c, stroke, pts, i);
   }
 
-  // Paint-bucket fill on the ink layer. Fills the connected area that matches
-  // the color under the seed (transparent areas are the usual target).
+  // Paint-bucket fill on the ink layer: fills the connected area matching the
+  // colour under the seed point (usually transparent space).
   function floodFill(f) {
     const W = ink.width, H = ink.height;
     const d = dpr(), k = view.scale;
@@ -257,7 +291,7 @@
     const fr = parseInt(f.color.slice(1, 3), 16);
     const fg = parseInt(f.color.slice(3, 5), 16);
     const fb = parseInt(f.color.slice(5, 7), 16);
-    if (tr === fr && tg === fg && tb === fb && ta === 255) return;   // already this color
+    if (tr === fr && tg === fg && tb === fb && ta === 255) return;   // already this colour
 
     const TOL = 24;
     const match = o => Math.abs(data[o] - tr) + Math.abs(data[o + 1] - tg) +
@@ -265,7 +299,6 @@
     const visited = new Uint8Array(W * H);
     const stack = [sx, sy];
 
-    // Scanline flood fill
     while (stack.length) {
       const y = stack.pop(), x = stack.pop();
       if (visited[y * W + x] || !match((y * W + x) * 4)) continue;
@@ -298,15 +331,37 @@
     const x0 = -view.ox / s, x1 = (w - view.ox) / s;
     const y0 = -view.oy / s, y1 = (h - view.oy) / s;
     ctx.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
-    ctx.strokeStyle = '#dfe6ee';
-    ctx.lineWidth = 1 / s;   // keeps the grid one screen pixel wide at any zoom
+    ctx.strokeStyle = '#c9d3df';
+    ctx.lineWidth = 1 / s;   // one screen pixel at any zoom
     ctx.beginPath();
     for (let x = Math.floor(x0 / GRID) * GRID; x <= x1; x += GRID) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
     for (let y = Math.floor(y0 / GRID) * GRID; y <= y1; y += GRID) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
     ctx.stroke();
   }
 
-  // Rebuild the committed ink from scratch (needed after zoom, pan, undo or resize)
+  // Selection outline plus corner handles, drawn in world space at screen-sized scale
+  function drawSelection(c) {
+    const b = rawBox(selected), s = view.scale;
+    const pad = (selected.size || 0) / 2 + 3 / s;
+    const h = 7 / s;
+    c.save();
+    c.strokeStyle = '#2f5fd6';
+    c.lineWidth = 1.5 / s;
+    c.setLineDash([6 / s, 4 / s]);
+    c.strokeRect(b.x0 - pad, b.y0 - pad, (b.x1 - b.x0) + 2 * pad, (b.y1 - b.y0) + 2 * pad);
+    c.setLineDash([]);
+    c.fillStyle = '#ffffff';
+    c.lineWidth = 2 / s;
+    for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]) {
+      c.beginPath();
+      c.rect(x - h, y - h, 2 * h, 2 * h);
+      c.fill();
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  // Rebuild the committed ink from scratch (needed after zoom, pan, undo, or resize)
   function redrawInk() {
     ictx.setTransform(1, 0, 0, 1, 0, 0);
     ictx.clearRect(0, 0, ink.width, ink.height);
@@ -324,7 +379,7 @@
     updateButtons();
   }
 
-  // Composite: white paper, optional grid, ink, then any preview
+  // Composite: white paper, optional grid, ink, preview, then selection
   function render() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
@@ -340,6 +395,10 @@
         ? { ...preview, eraser: false, color: 'rgba(120,120,120,0.7)' }
         : preview;
       drawStroke(ctx, p);
+    }
+    if (selected) {
+      setTransform(ctx);
+      drawSelection(ctx);
     }
   }
 
@@ -364,8 +423,100 @@
     };
   }
 
+  // ---------- hit testing ----------
+  function nearStroke(pt, s, tol) {
+    const pts = s.points, r = (s.size || 0) / 2 + tol;
+    if (pts.length === 1) return Math.hypot(pt.x - pts[0].x, pt.y - pts[0].y) <= r;
+    for (let i = 1; i < pts.length; i++) {
+      if (distSeg(pt, pts[i - 1], pts[i]) <= r) return true;
+    }
+    return false;
+  }
+
+  // Topmost item under the point; fills are skipped because their area is not an object
+  function hitItem(pt) {
+    const tol = 12 / view.scale;
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      if (s.fill) continue;
+      if (s.shape) {
+        const b = rawBox(s), pad = (s.size || 0) / 2 + tol;
+        if (pt.x >= b.x0 - pad && pt.x <= b.x1 + pad && pt.y >= b.y0 - pad && pt.y <= b.y1 + pad) return s;
+      } else if (nearStroke(pt, s, tol)) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  // Corner handle under the point, or null. `anchor` is the opposite corner.
+  function handleAt(pt) {
+    if (!selected) return null;
+    const b = rawBox(selected), r = 14 / view.scale;
+    const corners = [
+      { x: b.x0, y: b.y0, anchor: { x: b.x1, y: b.y1 } },
+      { x: b.x1, y: b.y0, anchor: { x: b.x0, y: b.y1 } },
+      { x: b.x0, y: b.y1, anchor: { x: b.x1, y: b.y0 } },
+      { x: b.x1, y: b.y1, anchor: { x: b.x0, y: b.y0 } }
+    ];
+    return corners.find(c => Math.abs(c.x - pt.x) <= r && Math.abs(c.y - pt.y) <= r) || null;
+  }
+
+  // ---------- move and resize ----------
+  function startDrag(kind, item, pt, anchor) {
+    drag = {
+      kind,
+      ref: item,              // the original object, as it appears in `before`
+      before: strokes,
+      start: pt,
+      anchor,
+      orig: item.points.map(p => ({ ...p })),
+      box: rawBox(item)
+    };
+  }
+
+  function updateDrag(q) {
+    const d = drag, b = d.box;
+    let fn;
+    if (d.kind === 'move') {
+      let dx = q.x - d.start.x, dy = q.y - d.start.y;
+      if (snap) {
+        dx = Math.round((b.x0 + dx) / GRID) * GRID - b.x0;
+        dy = Math.round((b.y0 + dy) / GRID) * GRID - b.y0;
+      }
+      fn = p => ({ x: p.x + dx, y: p.y + dy });
+    } else {
+      const t = snap ? snapPt(q) : q;
+      const nb = box(d.anchor, t);
+      const w0 = b.x1 - b.x0, h0 = b.y1 - b.y0;
+      const sx = w0 > 1e-6 ? (nb.x1 - nb.x0) / w0 : 1;
+      const sy = h0 > 1e-6 ? (nb.y1 - nb.y0) / h0 : 1;
+      fn = p => ({ x: nb.x0 + (p.x - b.x0) * sx, y: nb.y0 + (p.y - b.y0) * sy });
+    }
+    const item = { ...d.ref, points: d.orig.map(p => ({ ...fn(p), p: p.p })) };
+    strokes = d.before.map(s => (s === d.ref ? item : s));
+    selected = item;
+    scheduleRender(true);
+  }
+
+  function finishDrag() {
+    if (strokes !== drag.before) pushHistory(drag.before);
+    drag = null;
+    activePointerId = null;
+    scheduleRender(true);
+    updateButtons();
+  }
+
+  function cancelDrag() {
+    strokes = drag.before;
+    drag = null;
+    activePointerId = null;
+    scheduleRender(true);
+  }
+
   // ---------- pinch to zoom and pan ----------
   function startGesture() {
+    if (drag) cancelDrag();
     if (current && current.pointerType === 'touch') cancelCurrent();
     const [a, b] = [...touches.values()];
     gesture = {
@@ -383,7 +534,7 @@
     const r = canvas.getBoundingClientRect();
     const s0 = gesture.view.scale;
     const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s0 * dist / gesture.dist));
-    // The drawing point that sat under the starting midpoint stays under the current midpoint
+    // The drawing point under the starting midpoint stays under the current midpoint
     const wx = (gesture.mx - r.left - gesture.view.ox) / s0;
     const wy = (gesture.my - r.top - gesture.view.oy) / s0;
     view = { scale, ox: mx - r.left - wx * scale, oy: my - r.top - wy * scale };
@@ -410,12 +561,31 @@
 
     if (gesture || activePointerId !== null) return;
 
-    const pt = toWorld(e);
+    const raw = toWorld(e);
+    const isShape = SHAPES.includes(tool);
+    const dragging = isShape || mode === 'line';   // these need a start and an end point
 
-    // Paint bucket: one tap applies a fill and does not start a drag
+    // Select: grab a corner to resize, or an object to move; tap empty space to deselect
+    if (tool === 'select') {
+      activePointerId = e.pointerId;
+      canvas.setPointerCapture(e.pointerId);
+      const corner = handleAt(raw);
+      if (selected && corner) {
+        startDrag('resize', selected, raw, corner.anchor);
+      } else {
+        selected = hitItem(raw);
+        if (selected) startDrag('move', selected, raw, null);
+        else activePointerId = null;
+      }
+      scheduleRender(false);
+      updateButtons();
+      return;
+    }
+
+    // Fill: one tap paints the area under it
     if (tool === 'fill') {
-      strokes.push({ fill: true, color, x: pt.x, y: pt.y });
-      redoStack = [];
+      pushHistory(strokes);
+      strokes = [...strokes, { fill: true, color, x: raw.x, y: raw.y }];
       redrawInk();
       return;
     }
@@ -423,8 +593,7 @@
     activePointerId = e.pointerId;
     canvas.setPointerCapture(e.pointerId);
 
-    const isShape = SHAPES.includes(tool);
-    const dragged = isShape || mode === 'line';   // these need a start and an end point
+    const pt = dragging && snap ? snapPt(raw) : raw;
     current = {
       color,
       size: tool === 'eraser' ? eraserSize : penSize,
@@ -433,13 +602,13 @@
       shape: isShape ? tool : null,
       filled: isShape && shapeFilled,
       pointerType: e.pointerType,
-      points: dragged ? [pt, { ...pt }] : [pt]
+      points: dragging ? [pt, { ...pt }] : [raw]
     };
     if (current.straight || current.shape) {
       preview = current;
     } else {
       setTransform(ictx);
-      drawStroke(ictx, current);   // tap shows as a dot
+      drawStroke(ictx, current);   // a tap shows as a dot
     }
     scheduleRender(false);
   });
@@ -449,7 +618,14 @@
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (gesture) { if (touches.size >= 2) updateGesture(); return; }
     }
-    if (gesture || !current || e.pointerId !== activePointerId) return;
+    if (gesture) return;
+
+    if (drag) {
+      if (e.pointerId === activePointerId) updateDrag(toWorld(e));
+      return;
+    }
+
+    if (!current || e.pointerId !== activePointerId) return;
 
     const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
     const dragging = current.straight || current.shape;
@@ -457,7 +633,7 @@
     for (const ev of events) {
       const pt = toWorld(ev);
       if (dragging) {
-        current.points[1] = pt;
+        current.points[1] = snap ? snapPt(pt) : pt;
       } else {
         current.points.push(pt);
         drawSegment(ictx, current, current.points, current.points.length - 1);
@@ -472,9 +648,13 @@
       touches.delete(e.pointerId);
       if (touches.size < 2) gesture = null;
     }
+    if (drag) {
+      if (e.pointerId === activePointerId) finishDrag();
+      return;
+    }
     if (!current || e.pointerId !== activePointerId) return;
-    strokes.push(current);
-    redoStack = [];
+    pushHistory(strokes);
+    strokes = [...strokes, current];
     current = null;
     activePointerId = null;
     preview = null;
@@ -484,31 +664,55 @@
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
 
-  // ---------- undo / redo / clear ----------
+  // ---------- history: undo, redo, delete, clear ----------
+  // Each history entry is the whole item list before a change. Items are never
+  // mutated, so storing the list is enough.
+  function pushHistory(before) {
+    undoStack.push(before);
+    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    redoStack = [];
+  }
+
   function undo() {
-    if (!strokes.length) return;
-    redoStack.push(strokes.pop());
+    if (!undoStack.length) return;
+    redoStack.push(strokes);
+    strokes = undoStack.pop();
+    if (!strokes.includes(selected)) selected = null;
     redrawInk();
   }
+
   function redo() {
     if (!redoStack.length) return;
-    strokes.push(redoStack.pop());
+    undoStack.push(strokes);
+    strokes = redoStack.pop();
+    if (!strokes.includes(selected)) selected = null;
     redrawInk();
   }
+
+  function deleteSelected() {
+    if (!selected) return;
+    pushHistory(strokes);
+    strokes = strokes.filter(s => s !== selected);
+    selected = null;
+    redrawInk();
+  }
+
   function clearAll() {
     if (!strokes.length) return;
-    redoStack.push(...strokes.reverse());
+    pushHistory(strokes);
     strokes = [];
+    selected = null;
     redrawInk();
   }
 
   function updateButtons() {
-    $('undoBtn').disabled = strokes.length === 0;
+    $('undoBtn').disabled = undoStack.length === 0;
     $('redoBtn').disabled = redoStack.length === 0;
+    $('delBtn').disabled = !selected;
   }
 
   // ---------- export ----------
-  // Exports the ink on white, without the grid or any preview
+  // Exports the ink on white, without the grid, selection, or preview
   function exportCanvas() {
     const c = document.createElement('canvas');
     c.width = ink.width;
@@ -568,7 +772,7 @@
   const sizeLabel = $('sizeLabel');
   // The slider controls whichever tool is active, with its own range and stored value
   function syncSlider() {
-    size.disabled = tool === 'fill';
+    size.disabled = tool === 'fill' || tool === 'select';
     if (tool === 'eraser') { size.min = 4; size.max = 80; size.value = eraserSize; }
     else { size.min = 1; size.max = 30; size.value = penSize; }
     sizeLabel.textContent = size.value;
@@ -581,10 +785,14 @@
 
   function setTool(t, el) {
     tool = t;
+    if (t !== 'select') selected = null;
     setGroup('tool', el);
     syncSlider();
+    scheduleRender(false);
+    updateButtons();
   }
 
+  $('selectBtn').onclick = e => setTool('select', e.currentTarget);
   $('penBtn').onclick = e => setTool('pen', e.currentTarget);
   $('eraserBtn').onclick = e => setTool('eraser', e.currentTarget);
   $('rectBtn').onclick = e => setTool('rect', e.currentTarget);
@@ -593,10 +801,10 @@
   $('fillBtn').onclick = e => setTool('fill', e.currentTarget);
 
   const colorPick = $('colorPick');
-  // Picking any color switches to a drawing tool, since the eraser ignores color
+  // Picking any colour switches to a drawing tool, since the eraser ignores colour
   colorPick.addEventListener('input', () => {
     color = colorPick.value;
-    if (tool === 'eraser') setTool('pen', $('penBtn'));
+    if (tool === 'eraser' || tool === 'select') setTool('pen', $('penBtn'));
     setGroup('color', null);
   });
 
@@ -604,7 +812,7 @@
     btn.onclick = () => {
       color = btn.dataset.color;
       colorPick.value = color;
-      if (tool === 'eraser') setTool('pen', $('penBtn'));
+      if (tool === 'eraser' || tool === 'select') setTool('pen', $('penBtn'));
       setGroup('color', btn);
     };
   });
@@ -623,6 +831,11 @@
     render();
   };
 
+  $('snapBtn').onclick = e => {
+    snap = !snap;
+    e.currentTarget.classList.toggle('active', snap);
+  };
+
   $('resetViewBtn').onclick = () => {
     view = { scale: 1, ox: 0, oy: 0 };
     scheduleRender(true);
@@ -630,6 +843,7 @@
 
   $('undoBtn').onclick = undo;
   $('redoBtn').onclick = redo;
+  $('delBtn').onclick = deleteSelected;
   $('clearBtn').onclick = () => {
     if (confirm('Clear the whole drawing? You can still undo.')) clearAll();
   };
@@ -638,9 +852,11 @@
 
   // Keyboard shortcuts for when a keyboard is attached
   window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); savePNG(); }
+    if (!mod && (e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); deleteSelected(); }
   });
 
   // Prevent iOS double-tap zoom and rubber-band scroll on the canvas
