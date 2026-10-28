@@ -333,13 +333,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.16.1</div>
+<div id="version">v0.16.2</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.16.1';
+  const APP_VERSION = '0.16.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1583,7 +1583,7 @@
       const file = new File([JSON.stringify(projectData())], name, { type: 'application/json' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: 'Pen Draw project' });
+          await navigator.share({ files: [file] });   // no title: iPadOS can use it as the file name
           setImportMsg('Project saved.');
           return;
         } catch (err) {
