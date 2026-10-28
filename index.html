@@ -46,14 +46,12 @@
   }
   .circle-btn:disabled { opacity: 0.35; }
   .circle-btn:active { background: #e6e6e6; }
-  #wlabel { font-size: 15px; font-weight: 600; flex-shrink: 0; }
-  #size { -webkit-appearance: none; appearance: none; width: min(220px, 16vw); height: 30px; flex-shrink: 0; background: transparent; margin: 0; }
-  #size::-webkit-slider-runnable-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
-  #size::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
-  #size::-moz-range-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
-  #size::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
-  #size:disabled { opacity: 0.35; }
-  #sizeLabel { font-size: 17px; font-weight: 700; min-width: 30px; text-align: center; flex-shrink: 0; }
+  .width-input { -webkit-appearance: none; appearance: none; width: 100%; height: 34px; background: transparent; margin: 4px 0 10px; }
+  .width-input::-webkit-slider-runnable-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
+  .width-input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
+  .width-input::-moz-range-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
+  .width-input::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
+  .width-label { font-size: 17px; font-weight: 700; text-transform: none; letter-spacing: 0; color: #111; margin-left: 6px; }
 
   /* ---------- slide-out drawers ---------- */
   .drawer {
@@ -145,7 +143,7 @@
     <div class="glabel">Tools</div>
     <button class="rail-btn tool-btn" data-tool="select" id="selectBtn" title="Select, move, resize and rotate">↖<span class="cap">Select</span></button>
     <button class="rail-btn tool-btn" data-tool="pen" data-drawer="pen" id="penBtn" title="Pen">✏️<span class="cap">Pen</span></button>
-    <button class="rail-btn tool-btn" data-tool="eraser" id="eraserBtn" title="Eraser">🧽<span class="cap">Eraser</span></button>
+    <button class="rail-btn tool-btn" data-tool="eraser" data-drawer="eraser" id="eraserBtn" title="Eraser">🧽<span class="cap">Eraser</span></button>
     <button class="rail-btn" data-drawer="shapes" id="shapeBtn" title="Shapes">
       <span id="shapeIcon">▭</span><span class="cap">Shapes</span>
     </button>
@@ -198,9 +196,6 @@
       <polyline points="20 3.5 20 8 15.5 8"></polyline>
     </svg>
   </button>
-  <span id="wlabel">Width</span>
-  <input id="size" type="range" min="1" max="30" value="4" title="Width of the active tool">
-  <span id="sizeLabel">4</span>
   <button class="bar-btn" data-drawer="import" id="importBtn" title="Pictures and projects">📁<span class="cap">Files</span></button>
   <button class="bar-btn" id="saveBtn" title="Save drawing as PNG">💾<span class="cap">Save PNG</span></button>
   <button class="bar-btn" id="copyBtn" title="Copy drawing as PNG to clipboard">
@@ -246,6 +241,8 @@
     <button id="curveBtn" class="opt-btn active" data-group="mode" title="Smooth curves">〜 Curve</button>
     <button id="lineBtn" class="opt-btn" data-group="mode" title="Straight lines">／ Line</button>
   </div>
+  <div class="sub">Width <span class="width-label" id="penWidthLabel">4</span></div>
+  <input id="penWidth" class="width-input" type="range" min="1" max="30" value="4">
   <p class="hint">Curve draws freehand. Line draws a straight line from where the pen goes down to where it lifts.</p>
 </aside>
 
@@ -258,7 +255,17 @@
   <button class="opt-btn tool-btn" data-tool="arc" id="arcBtn">◠ Arc</button>
   <div class="sub">Fill</div>
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
+  <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
+  <input id="shapeWidth" class="width-input" type="range" min="1" max="30" value="4">
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved.</p>
+</aside>
+
+<!-- Eraser drawer -->
+<aside class="drawer" id="drawer-eraser" aria-label="Eraser">
+  <h3>Eraser <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Width <span class="width-label" id="eraserWidthLabel">24</span></div>
+  <input id="eraserWidth" class="width-input" type="range" min="4" max="80" value="24">
+  <p class="hint">Drag over ink to erase it. The eraser cuts through strokes and shapes on the active layer.</p>
 </aside>
 
 <!-- Import drawer: bring in pictures from Files, Photos, or the clipboard -->
@@ -326,13 +333,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.15.0</div>
+<div id="version">v0.16.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.15.0';
+  const APP_VERSION = '0.16.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1738,25 +1745,18 @@
     if (el) el.classList.add('active');
   }
 
-  const size = $('size');
-  const sizeLabel = $('sizeLabel');
-  // The width slider controls whichever tool is active, with its own range and stored value
+  // Width sliders: pen and shapes share penSize, and the eraser has its own eraserSize.
+  // Every slider is kept in step with the stored value.
   function syncSlider() {
-    size.disabled = tool === 'fill' || tool === 'select' || tool === 'text';
-    if (tool === 'eraser') {
-      size.min = 4; size.max = 80; size.value = eraserSize;
-      $('wlabel').textContent = 'Eraser width';
-    } else {
-      size.min = 1; size.max = 30; size.value = penSize;
-      $('wlabel').textContent = 'Width';
+    for (const [id, v] of [['penWidth', penSize], ['shapeWidth', penSize], ['eraserWidth', eraserSize]]) {
+      $(id).value = v;
+      $(id + 'Label').textContent = v;
     }
-    sizeLabel.textContent = size.value;
   }
-  size.addEventListener('input', () => {
-    if (tool === 'eraser') eraserSize = Number(size.value);
-    else penSize = Number(size.value);
-    sizeLabel.textContent = size.value;
-  });
+  for (const id of ['penWidth', 'shapeWidth']) {
+    $(id).addEventListener('input', e => { penSize = Number(e.target.value); syncSlider(); });
+  }
+  $('eraserWidth').addEventListener('input', e => { eraserSize = Number(e.target.value); syncSlider(); });
 
   // Highlights the active tool in the rail and in the shapes drawer
   function syncTools() {
@@ -1801,6 +1801,7 @@
       const name = b.dataset.drawer;
       // Opening a drawer for a tool selects that tool
       if (name === 'pen') setTool('pen');
+      if (name === 'eraser') setTool('eraser');
       // With text selected, the Text button keeps the selection for editing
       if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
       if (name === 'shapes' && !SHAPES.includes(tool)) setTool('rect');
