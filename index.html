@@ -427,7 +427,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.27.2</div>
+<div id="version">v0.27.3</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -444,7 +444,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.27.2';
+  const APP_VERSION = '0.27.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -579,9 +579,16 @@
     const [a, b] = s.points, dx = b.x - a.x, dy = b.y - a.y, k = (s.side || 1) / (Math.hypot(dx, dy) || 1);
     return { x: -dy * k, y: dx * k };
   };
+  // An arc's radius may not exceed 10 inches. That sets the least depth an arc of this half-chord can have,
+  // so a nearly flat arc cannot have a huge circle, its radials running off the drawing and its centre lost.
+  const ARC_RADIUS_INCHES = 10;
+  const arcMinDepth = half => {
+    const R = ARC_RADIUS_INCHES * PX_PER_INCH;
+    return half <= R ? R - Math.sqrt(R * R - half * half) : 0;   // beyond 20 inches of chord the cap cannot apply
+  };
   const arcBulge = s => {
     const [a, b] = s.points, half = Math.hypot(b.x - a.x, b.y - a.y) / 2;
-    return Math.min(3 * half, Math.max(0, s.bulge ?? half));   // up to three half-chords deep
+    return Math.min(3 * half, Math.max(arcMinDepth(half), s.bulge ?? half));   // up to three half-chords deep
   };
   // An arc's selection frame: the chord is the near edge and the apex lies mid-way along the far edge
   const arcFrame = s => {
