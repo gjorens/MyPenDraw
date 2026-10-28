@@ -395,7 +395,16 @@
     <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
     <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
   </div>
-  <p class="hint">Changes apply to the selected text. With nothing selected, they set the next text you place. Custom colours are in the Colour drawer.</p>
+  <div class="sub">Custom</div>
+  <div class="grid-sw">
+    <button class="swatch custom" data-group="color" data-idx="0" title="Custom colour 1"></button>
+    <button class="swatch custom" data-group="color" data-idx="1" title="Custom colour 2"></button>
+    <button class="swatch custom" data-group="color" data-idx="2" title="Custom colour 3"></button>
+    <button class="swatch custom" data-group="color" data-idx="3" title="Custom colour 4"></button>
+    <button class="swatch custom" data-group="color" data-idx="4" title="Custom colour 5"></button>
+    <button class="swatch custom" data-group="color" data-idx="5" title="Custom colour 6"></button>
+  </div>
+  <p class="hint">Changes apply to the selected text. With nothing selected, they set the next text you place. Hold a custom colour to change it.</p>
 </aside>
 
 <!-- Layers float on the right -->
@@ -415,7 +424,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.23.1</div>
+<div id="version">v0.23.2</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -432,7 +441,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.23.1';
+  const APP_VERSION = '0.23.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2535,8 +2544,11 @@
   });
 
   // Six custom colours: a quick tap uses the colour; holding for about half a second opens the editor
+  // Each custom colour appears in the Colour drawer and the Text drawer; both buttons stay in step
   const customBtns = [...document.querySelectorAll('button.custom')];
-  customBtns.forEach((btn, i) => {
+  const customBtnsFor = i => customBtns.filter(b => Number(b.dataset.idx) === i);
+  customBtns.forEach(btn => {
+    const i = Number(btn.dataset.idx);
     btn.style.background = customColors[i];
     let timer = 0, held = false;
     btn.addEventListener('pointerdown', () => {
@@ -2555,7 +2567,11 @@
 
   function openColorEditor(i) {
     editIdx = i;
-    pickColor(customColors[i], customBtns[i]);
+    pickColor(customColors[i], customBtnsFor(i)[0]);
+    // The editor lives in the Colour drawer, so show it from there
+    if (colorFloating) colorWindowShown = true;
+    else openDrawer = 'colors';
+    syncDrawers();
     $('editName').textContent = i + 1;
     $('colorEditor').hidden = false;
     syncColorEditor();
@@ -2574,8 +2590,8 @@
       const hex = '#' + ['edR', 'edG', 'edB'].map(k => Number($(k).value).toString(16).padStart(2, '0')).join('');
       customColors[editIdx] = hex;
       saveCustom(customColors);
-      customBtns[editIdx].style.background = hex;
-      pickColor(hex, customBtns[editIdx]);
+      customBtnsFor(editIdx).forEach(b => { b.style.background = hex; });
+      pickColor(hex, customBtnsFor(editIdx)[0]);
       $('editPreview').style.background = hex;
       $('editHex').textContent = hex.toUpperCase();
     });
