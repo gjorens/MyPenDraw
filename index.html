@@ -282,7 +282,7 @@
   <div class="sub">Project</div>
   <button id="saveProjectBtn" class="opt-btn">💾 Save project</button>
   <button id="openProjectBtn" class="opt-btn">📂 Open project</button>
-  <input id="projectInput" type="file" hidden accept=".pendraw,application/json">
+  <input id="projectInput" type="file" hidden>
   <p class="hint">A project keeps every layer, object, text and picture, so you can reopen it later or on another device. Saving opens the share sheet, where you can choose Save to Files or iCloud Drive.</p>
 </aside>
 
@@ -333,13 +333,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.16.0</div>
+<div id="version">v0.16.1</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.16.0';
+  const APP_VERSION = '0.16.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
