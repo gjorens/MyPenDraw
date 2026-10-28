@@ -10,45 +10,82 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <meta name="apple-mobile-web-app-title" content="Pen Draw">
 <style>
-  :root { --bar-h: 60px; --accent: #1a3d9c; }
+  :root { --bar-h: 58px; --rail-w: 84px; --accent: #1a3d9c; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f4f1; font-family: -apple-system, system-ui, sans-serif; color: #111; }
 
-  #toolbar {
-    position: fixed; top: 0; left: 0; right: 0; height: var(--bar-h);
-    display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  /* ---------- left rail ---------- */
+  #rail {
+    position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail-w); z-index: 11;
+    background: #ffffff; border-right: 2px solid #b8b8b8;
+    overflow-y: auto; padding: 6px 6px 12px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .group { display: flex; flex-direction: column; gap: 5px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid #cfcfcf; }
+  .glabel { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; text-align: center; letter-spacing: .5px; margin-top: 4px; }
+  .rail-btn {
+    width: 100%; height: 58px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff; color: #111;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    font-size: 21px; cursor: pointer; padding: 0;
+  }
+  .rail-btn .cap { font-size: 11px; font-weight: 600; line-height: 1; }
+  .rail-btn.active { background: #dbe7ff; border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+  .rail-btn.open { border: 2.5px solid #111; }
+  .rail-btn:disabled { opacity: 0.35; }
+  .rail-select { width: 100%; height: 34px; border-radius: 8px; border: 1.5px solid #7a7a7a; background: #fff; font-size: 15px; font-weight: 600; color: #111; text-align: center; }
+  .dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1.5px #555; }
+
+  /* ---------- top bar ---------- */
+  #topbar {
+    position: fixed; top: 0; left: var(--rail-w); right: 0; height: var(--bar-h); z-index: 10;
+    display: flex; align-items: center; gap: 12px; padding: 0 14px;
     background: #ffffff; border-bottom: 2px solid #b8b8b8;
-    overflow-x: auto; z-index: 10;
   }
-  #toolbar button, #gridSpacing {
-    min-width: 42px; height: 42px; border-radius: 10px; border: 1.5px solid #8a8a8a;
-    background: #ffffff; color: #111; font-size: 17px; cursor: pointer; flex-shrink: 0;
+  .circle-btn {
+    width: 46px; height: 46px; border-radius: 50%; border: 2px solid #444; background: #fff; padding: 0;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
   }
-  #toolbar button.active { background: #dbe7ff; border-color: var(--accent); outline: 3px solid var(--accent); outline-offset: 1px; }
-  #toolbar button:disabled { opacity: 0.35; }
-  #toolbar button.text-btn { font-size: 15px; font-weight: 600; padding: 0 10px; }
-  #gridSpacing { font-size: 15px; font-weight: 600; padding: 0 6px; }
-
-  .swatch { width: 30px !important; min-width: 30px !important; height: 30px !important; border-radius: 50% !important; padding: 0; border: 2px solid #fff !important; box-shadow: 0 0 0 1.5px #5a5a5a; }
-  .swatch.active { box-shadow: 0 0 0 3px var(--accent); }
-  input.custom { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1.5px #5a5a5a; padding: 0; cursor: pointer; background: none; flex-shrink: 0; }
-  input.custom::-webkit-color-swatch-wrapper { padding: 0; }
-  input.custom::-webkit-color-swatch { border: none; border-radius: 50%; }
-  input.custom.active { box-shadow: 0 0 0 3px var(--accent); }
-  .sep { width: 2px; height: 30px; background: #b0b0b0; flex-shrink: 0; }
-
-  /* Slider: dark track and thumb so it reads clearly */
-  #size { -webkit-appearance: none; appearance: none; width: 150px; height: 30px; flex-shrink: 0; background: transparent; margin: 0; }
+  .circle-btn:disabled { opacity: 0.35; }
+  .circle-btn:active { background: #e6e6e6; }
+  #wlabel { font-size: 15px; font-weight: 600; flex-shrink: 0; }
+  #size { -webkit-appearance: none; appearance: none; width: 220px; height: 30px; flex-shrink: 0; background: transparent; margin: 0; }
   #size::-webkit-slider-runnable-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
   #size::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
   #size::-moz-range-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
   #size::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
   #size:disabled { opacity: 0.35; }
-  #sizeLabel { font-size: 16px; font-weight: 700; color: #111; min-width: 30px; text-align: center; flex-shrink: 0; }
+  #sizeLabel { font-size: 17px; font-weight: 700; min-width: 30px; text-align: center; flex-shrink: 0; }
 
-  #stage { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
-  canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
+  /* ---------- slide-out drawers ---------- */
+  .drawer {
+    position: fixed; left: var(--rail-w); top: var(--bar-h); bottom: 0; width: 290px; z-index: 12;
+    background: #ffffff; border-right: 2px solid #8a8a8a; box-shadow: 4px 0 18px rgba(0,0,0,0.18);
+    padding: 14px; overflow-y: auto;
+    transform: translateX(calc(-100% - var(--rail-w))); visibility: hidden;
+    transition: transform 0.22s ease, visibility 0.22s;
+  }
+  .drawer.open { transform: none; visibility: visible; }
+  .drawer h3 { margin: 0 0 12px; font-size: 19px; display: flex; justify-content: space-between; align-items: center; }
+  .drawer .close { width: 40px; height: 40px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff; font-size: 18px; cursor: pointer; }
+  .drawer .sub { font-size: 13px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: .4px; margin: 14px 0 8px; }
+  .drawer .hint { font-size: 13px; color: #444; margin-top: 10px; line-height: 1.4; }
+  .grid-sw { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; justify-items: center; }
+  .swatch, input.custom {
+    width: 52px !important; height: 52px !important; min-width: 52px !important; border-radius: 50% !important;
+    padding: 0; border: 2px solid #fff !important; box-shadow: 0 0 0 1.5px #5a5a5a; cursor: pointer;
+  }
+  input.custom { -webkit-appearance: none; appearance: none; background: none; }
+  input.custom::-webkit-color-swatch-wrapper { padding: 0; }
+  input.custom::-webkit-color-swatch { border: none; border-radius: 50%; }
+  .swatch.active, input.custom.active { box-shadow: 0 0 0 4px var(--accent) !important; }
+  .opt-btn {
+    width: 100%; height: 52px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
+    display: flex; align-items: center; gap: 12px; padding: 0 14px; font-size: 17px; font-weight: 600; color: #111; cursor: pointer; margin-bottom: 8px;
+  }
+  .opt-btn.active { background: #dbe7ff; border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+  .opt-row { display: flex; gap: 8px; }
+  .opt-row .opt-btn { margin-bottom: 0; justify-content: center; }
 
+  /* ---------- layers panel ---------- */
   #layerPanel {
     position: fixed; top: calc(var(--bar-h) + 8px); right: 10px; width: 310px; max-height: 65vh; overflow-y: auto;
     background: #ffffff; border: 2px solid #8a8a8a; border-radius: 14px; padding: 10px; z-index: 15;
@@ -63,6 +100,10 @@
   .layer-row button:disabled { opacity: 0.35; }
   .layer-row .lname { flex: 1; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layer-row input[type=range] { width: 70px; flex-shrink: 0; accent-color: var(--accent); }
+
+  /* ---------- canvas ---------- */
+  #stage { position: fixed; top: var(--bar-h); left: var(--rail-w); right: 0; bottom: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
 
   #version {
     position: fixed; right: 10px; bottom: 8px; z-index: 10;
@@ -79,59 +120,126 @@
 </head>
 <body>
 
-<div id="toolbar">
-  <button id="selectBtn" data-group="tool" title="Select, move, and resize">↖</button>
-  <button id="penBtn" class="active" data-group="tool" title="Pen">✏️</button>
-  <button id="eraserBtn" data-group="tool" title="Eraser">🧽</button>
-  <button id="rectBtn" data-group="tool" title="Rectangle">▭</button>
-  <button id="ovalBtn" data-group="tool" title="Oval">○</button>
-  <button id="arcBtn" data-group="tool" title="Arc: drag from one end to the other">◠</button>
-  <button id="fillBtn" class="text-btn" data-group="tool" title="Fill area">Fill</button>
-  <div class="sep"></div>
-  <button class="swatch active" data-group="color" data-color="#111111" style="background:#111" title="Black"></button>
-  <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131" title="Red"></button>
-  <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6" title="Blue"></button>
-  <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
-  <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
-  <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
-  <div class="sep"></div>
-  <input class="custom" data-group="color" data-idx="0" type="color" value="#ffffff" title="Custom colour 1">
-  <input class="custom" data-group="color" data-idx="1" type="color" value="#868e96" title="Custom colour 2">
-  <input class="custom" data-group="color" data-idx="2" type="color" value="#495057" title="Custom colour 3">
-  <input class="custom" data-group="color" data-idx="3" type="color" value="#ffd43b" title="Custom colour 4">
-  <input class="custom" data-group="color" data-idx="4" type="color" value="#69db7c" title="Custom colour 5">
-  <input class="custom" data-group="color" data-idx="5" type="color" value="#4dabf7" title="Custom colour 6">
-  <div class="sep"></div>
-  <input id="size" type="range" min="1" max="30" value="4" title="Brush, eraser, or outline width">
-  <span id="sizeLabel">4</span>
-  <div class="sep"></div>
-  <button id="solidBtn" title="Filled shapes">■</button>
-  <button id="curveBtn" class="text-btn active" data-group="mode" title="Smooth curves">Curve</button>
-  <button id="lineBtn" class="text-btn" data-group="mode" title="Straight lines">Line</button>
-  <button id="gridBtn" title="Show grid">▦</button>
-  <button id="snapBtn" title="Snap to grid">⊞</button>
-  <select id="gridSpacing" title="Grid spacing">
-    <option value="10">10</option>
-    <option value="20">20</option>
-    <option value="40" selected>40</option>
-    <option value="80">80</option>
-  </select>
-  <button id="resetViewBtn" title="Reset zoom">⤢</button>
-  <button id="layersBtn" title="Layers">▤</button>
-  <div class="sep"></div>
-  <button id="undoBtn" title="Undo" disabled>↶</button>
-  <button id="redoBtn" title="Redo" disabled>↷</button>
-  <button id="delBtn" title="Delete selected" disabled>⌫</button>
-  <button id="clearBtn" title="Clear all">🗑</button>
-  <button id="saveBtn" title="Save PNG">💾</button>
-  <button id="copyBtn" title="Copy drawing to clipboard" aria-label="Copy drawing to clipboard">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+<!-- Left rail: grouped by function -->
+<nav id="rail">
+  <div class="group">
+    <div class="glabel">Tools</div>
+    <button class="rail-btn tool-btn" data-tool="select" id="selectBtn" title="Select, move, and resize">↖<span class="cap">Select</span></button>
+    <button class="rail-btn tool-btn" data-tool="pen" data-drawer="pen" id="penBtn" title="Pen">✏️<span class="cap">Pen</span></button>
+    <button class="rail-btn tool-btn" data-tool="eraser" id="eraserBtn" title="Eraser">🧽<span class="cap">Eraser</span></button>
+    <button class="rail-btn" data-drawer="shapes" id="shapeBtn" title="Shapes">
+      <span id="shapeIcon">▭</span><span class="cap">Shapes</span>
+    </button>
+    <button class="rail-btn tool-btn" data-tool="fill" id="fillBtn" title="Fill area">🪣<span class="cap">Fill</span></button>
+  </div>
+
+  <div class="group">
+    <div class="glabel">Colour</div>
+    <button class="rail-btn" data-drawer="colors" id="colorBtn" title="Colours">
+      <span class="dot" id="colorDot" style="background:#111"></span><span class="cap">Colour</span>
+    </button>
+  </div>
+
+  <div class="group">
+    <div class="glabel">View</div>
+    <button class="rail-btn" id="gridBtn" title="Show grid">▦<span class="cap">Grid</span></button>
+    <button class="rail-btn" id="snapBtn" title="Snap to grid">⊞<span class="cap">Snap</span></button>
+    <select id="gridSpacing" class="rail-select" title="Grid spacing">
+      <option value="10">10</option>
+      <option value="20">20</option>
+      <option value="40" selected>40</option>
+      <option value="80">80</option>
+    </select>
+    <button class="rail-btn" id="resetViewBtn" title="Reset zoom">⤢<span class="cap">Zoom 1:1</span></button>
+    <button class="rail-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
+  </div>
+
+  <div class="group">
+    <div class="glabel">Edit</div>
+    <button class="rail-btn" id="delBtn" title="Delete selected" disabled>⌫<span class="cap">Delete</span></button>
+    <button class="rail-btn" id="clearBtn" title="Clear all">🗑<span class="cap">Clear</span></button>
+  </div>
+
+  <div class="group">
+    <div class="glabel">File</div>
+    <button class="rail-btn" id="saveBtn" title="Save PNG">💾<span class="cap">Save</span></button>
+    <button class="rail-btn" id="copyBtn" title="Copy drawing to clipboard">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span class="cap">Copy</span>
+    </button>
+  </div>
+</nav>
+
+<!-- Top bar: history and width -->
+<header id="topbar">
+  <button id="undoBtn" class="circle-btn" title="Undo" disabled aria-label="Undo">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4.5 13a8 8 0 1 0 2.4-6.2"></path>
+      <polyline points="4 3.5 4 8 8.5 8"></polyline>
     </svg>
   </button>
-</div>
+  <button id="redoBtn" class="circle-btn" title="Redo" disabled aria-label="Redo">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M19.5 13a8 8 0 1 1-2.4-6.2"></path>
+      <polyline points="20 3.5 20 8 15.5 8"></polyline>
+    </svg>
+  </button>
+  <span id="wlabel">Width</span>
+  <input id="size" type="range" min="1" max="30" value="4" title="Width of the active tool">
+  <span id="sizeLabel">4</span>
+</header>
 
+<!-- Colour drawer -->
+<aside class="drawer" id="drawer-colors" aria-label="Colours">
+  <h3>Colour <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Solid</div>
+  <div class="grid-sw">
+    <button class="swatch active" data-group="color" data-color="#111111" style="background:#111" title="Black"></button>
+    <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131" title="Red"></button>
+    <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6" title="Blue"></button>
+    <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
+    <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
+    <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
+  </div>
+  <div class="sub">Custom</div>
+  <div class="grid-sw">
+    <input class="custom" data-group="color" data-idx="0" type="color" value="#ffffff" title="Custom colour 1">
+    <input class="custom" data-group="color" data-idx="1" type="color" value="#868e96" title="Custom colour 2">
+    <input class="custom" data-group="color" data-idx="2" type="color" value="#495057" title="Custom colour 3">
+    <input class="custom" data-group="color" data-idx="3" type="color" value="#ffd43b" title="Custom colour 4">
+    <input class="custom" data-group="color" data-idx="4" type="color" value="#69db7c" title="Custom colour 5">
+    <input class="custom" data-group="color" data-idx="5" type="color" value="#4dabf7" title="Custom colour 6">
+  </div>
+  <p class="hint">Tap a custom colour to use it. Tap it again to change it with the colour picker.</p>
+</aside>
+
+<!-- Pen drawer -->
+<aside class="drawer" id="drawer-pen" aria-label="Pen">
+  <h3>Pen <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Stroke</div>
+  <div class="opt-row">
+    <button id="curveBtn" class="opt-btn active" data-group="mode" title="Smooth curves">〜 Curve</button>
+    <button id="lineBtn" class="opt-btn" data-group="mode" title="Straight lines">／ Line</button>
+  </div>
+  <p class="hint">Curve draws freehand. Line draws a straight line from where the pen goes down to where it lifts.</p>
+</aside>
+
+<!-- Shapes drawer -->
+<aside class="drawer" id="drawer-shapes" aria-label="Shapes">
+  <h3>Shapes <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Choose a shape</div>
+  <button class="opt-btn tool-btn" data-tool="rect" id="rectBtn">▭ Rectangle</button>
+  <button class="opt-btn tool-btn" data-tool="oval" id="ovalBtn">○ Oval</button>
+  <button class="opt-btn tool-btn" data-tool="arc" id="arcBtn">◠ Arc</button>
+  <div class="sub">Fill</div>
+  <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
+  <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved.</p>
+</aside>
+
+<!-- Colour swatches are shown in the drawer; layers float on the right -->
 <div id="layerPanel" hidden>
   <div class="lp-head">
     <strong>Layers</strong>
@@ -148,19 +256,20 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.6.0</div>
+<div id="version">v0.7.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.6.0';
+  const APP_VERSION = '0.7.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
   const canvas = $('c');
   const ctx = canvas.getContext('2d');
   const SHAPES = ['rect', 'oval', 'arc'];
+  const SHAPE_ICONS = { rect: '▭', oval: '○', arc: '◠' };
   const MIN_SCALE = 0.5, MAX_SCALE = 6;
   const HISTORY_LIMIT = 200;
   const CUSTOM_KEY = 'pendraw-custom-colors';
@@ -199,6 +308,7 @@
   const touches = new Map(); // active finger touches, used for pinch
   let gesture = null;        // pinch state
   let rafId = 0, pendingFull = false;
+  let openDrawer = null;     // 'colors' | 'pen' | 'shapes' | null
 
   // ---------- custom colours (saved on this device) ----------
   function loadCustom() {
@@ -974,7 +1084,7 @@
 
   function copyDrawing() {
     if (!navigator.clipboard || !window.ClipboardItem) {
-      showToast('Copy not supported here. Use 💾 to save instead.');
+      showToast('Copy not supported here. Use Save instead.');
       return;
     }
     exportCanvas().toBlob(async blob => {
@@ -983,12 +1093,12 @@
         showToast('Drawing copied to clipboard');
       } catch (err) {
         console.error(err);
-        showToast('Copy failed. Try 💾 to save instead.');
+        showToast('Copy failed. Try Save instead.');
       }
     }, 'image/png');
   }
 
-  // ---------- toolbar ----------
+  // ---------- toolbar, tools, and drawers ----------
   function setGroup(group, el) {
     document.querySelectorAll(`[data-group="${group}"]`).forEach(b => b.classList.remove('active'));
     if (el) el.classList.add('active');
@@ -996,11 +1106,16 @@
 
   const size = $('size');
   const sizeLabel = $('sizeLabel');
-  // The slider controls whichever tool is active, with its own range and stored value
+  // The width slider controls whichever tool is active, with its own range and stored value
   function syncSlider() {
     size.disabled = tool === 'fill' || tool === 'select';
-    if (tool === 'eraser') { size.min = 4; size.max = 80; size.value = eraserSize; }
-    else { size.min = 1; size.max = 30; size.value = penSize; }
+    if (tool === 'eraser') {
+      size.min = 4; size.max = 80; size.value = eraserSize;
+      $('wlabel').textContent = 'Eraser width';
+    } else {
+      size.min = 1; size.max = 30; size.value = penSize;
+      $('wlabel').textContent = 'Width';
+    }
     sizeLabel.textContent = size.value;
   }
   size.addEventListener('input', () => {
@@ -1009,27 +1124,61 @@
     sizeLabel.textContent = size.value;
   });
 
-  function setTool(t, el) {
+  // Highlights the active tool in the rail and in the shapes drawer
+  function syncTools() {
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+    const isShape = SHAPES.includes(tool);
+    $('shapeBtn').classList.toggle('active', isShape);
+    $('shapeIcon').textContent = SHAPE_ICONS[tool] || SHAPE_ICONS.rect;
+  }
+
+  function setTool(t) {
     tool = t;
     if (t !== 'select') selected = null;
-    setGroup('tool', el);
+    syncTools();
     syncSlider();
     scheduleRender(false);
     updateButtons();
   }
 
-  $('selectBtn').onclick = e => setTool('select', e.currentTarget);
-  $('penBtn').onclick = e => setTool('pen', e.currentTarget);
-  $('eraserBtn').onclick = e => setTool('eraser', e.currentTarget);
-  $('rectBtn').onclick = e => setTool('rect', e.currentTarget);
-  $('ovalBtn').onclick = e => setTool('oval', e.currentTarget);
-  $('arcBtn').onclick = e => setTool('arc', e.currentTarget);
-  $('fillBtn').onclick = e => setTool('fill', e.currentTarget);
+  document.querySelectorAll('.tool-btn').forEach(b => {
+    b.onclick = () => setTool(b.dataset.tool);
+  });
+
+  // Slide-out drawers: only one is open at a time
+  function toggleDrawer(name) {
+    openDrawer = openDrawer === name ? null : name;
+    syncDrawers();
+  }
+
+  function syncDrawers() {
+    document.querySelectorAll('.drawer').forEach(d => {
+      d.classList.toggle('open', d.id === 'drawer-' + openDrawer);
+    });
+    document.querySelectorAll('[data-drawer]').forEach(b => {
+      b.classList.toggle('open', b.dataset.drawer === openDrawer);
+    });
+  }
+
+  document.querySelectorAll('[data-drawer]').forEach(b => {
+    b.onclick = () => {
+      const name = b.dataset.drawer;
+      // Opening a drawer for a tool selects that tool
+      if (name === 'pen') setTool('pen');
+      if (name === 'shapes' && !SHAPES.includes(tool)) setTool('rect');
+      toggleDrawer(name);
+    };
+  });
+
+  document.querySelectorAll('[data-close]').forEach(b => {
+    b.onclick = () => { openDrawer = null; syncDrawers(); };
+  });
 
   // Picking any colour switches away from the eraser and select tools, since neither uses colour
   function pickColor(c, el) {
     color = c;
-    if (tool === 'eraser' || tool === 'select') setTool('pen', $('penBtn'));
+    $('colorDot').style.background = c;
+    if (tool === 'eraser' || tool === 'select') setTool('pen');
     setGroup('color', el);
   }
 
@@ -1050,14 +1199,18 @@
     });
   });
 
-  $('solidBtn').onclick = e => {
-    shapeFilled = !shapeFilled;
-    e.currentTarget.classList.toggle('active', shapeFilled);
-  };
-
+  // Pen drawer: curve or straight line
   $('curveBtn').onclick = e => { mode = 'curve'; setGroup('mode', e.currentTarget); };
   $('lineBtn').onclick = e => { mode = 'line'; setGroup('mode', e.currentTarget); };
 
+  // Shapes drawer: filled or outline
+  $('solidBtn').onclick = e => {
+    shapeFilled = !shapeFilled;
+    e.currentTarget.textContent = shapeFilled ? '■ Solid fill: On' : '■ Solid fill: Off';
+    e.currentTarget.classList.toggle('active', shapeFilled);
+  };
+
+  // View group
   $('gridBtn').onclick = e => {
     showGrid = !showGrid;
     e.currentTarget.classList.toggle('active', showGrid);
@@ -1079,6 +1232,7 @@
     scheduleRender(true);
   };
 
+  // Edit and file groups
   $('undoBtn').onclick = undo;
   $('redoBtn').onclick = redo;
   $('delBtn').onclick = deleteSelected;
@@ -1101,7 +1255,9 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
 
   resize();
+  syncTools();
   syncSlider();
+  syncDrawers();
   renderLayerList();
   updateButtons();
 })();
