@@ -359,13 +359,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.18.0</div>
+<div id="version">v0.18.1</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.18.0';
+  const APP_VERSION = '0.18.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1761,11 +1761,14 @@
       if (confirm('Save the current project before starting a new one?')) {
         const saved = await saveProject();
         if (!saved) return;   // saving was cancelled or failed: keep the drawing
-      } else if (!confirm('Discard the current drawing? You can undo this.')) {
+      } else if (!confirm('Discard the current drawing? This cannot be undone.')) {
         return;
       }
     }
-    pushHistory(snapshot());
+    // Nothing from the old project is kept: no undo, no redo, no internal clipboard
+    undoStack = [];
+    redoStack = [];
+    clipboardItem = null;
     endTextEdit();
     layers = [gridLayer(), { id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }];
     layerSeq = 1;
