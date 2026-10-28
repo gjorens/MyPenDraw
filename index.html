@@ -351,6 +351,9 @@
   <button id="newProjectBtn" class="opt-btn">📄 New project</button>
   <button id="saveProjectBtn" class="opt-btn">💾 Save project</button>
   <button id="openProjectBtn" class="opt-btn">📂 Open project</button>
+  <div class="sub">Print</div>
+  <button id="pdfBtn" class="opt-btn">🖨 Export PDF: US Letter</button>
+  <p class="hint">Makes a one-page PDF at the drawing's real size, from the top-left of the screen. Only visible layers are included, and the grid is included when its layer is shown. Scale it to 100% when printing.</p>
   <input id="projectInput" type="file" hidden>
   <p class="hint">A project keeps every layer, object, text and picture, so you can reopen it later or on another device. Saving opens the share sheet, where you can choose Save to Files or iCloud Drive.</p>
 </aside>
@@ -402,7 +405,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.21.0</div>
+<div id="version">v0.22.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -413,7 +416,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.21.0';
+  const APP_VERSION = '0.22.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -862,7 +865,7 @@
   // Draws the grid into the grid layer's canvas, at the current zoom and spacing
   function drawGrid(c) {
     const d = dpr(), s = view.scale;
-    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const w = canvas.width / d, h = canvas.height / d;   // the canvas size, so the export can be larger
     const x0 = -view.ox / s, x1 = (w - view.ox) / s;
     const y0 = -view.oy / s, y1 = (h - view.oy) / s;
     c.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
@@ -2194,6 +2197,68 @@
     cx.globalAlpha = 1;
     return c;
   }
+
+  // Renders the visible layers again at 300 dpi for a US Letter page. The top-left of the
+  // screen becomes the top-left of the page, and one inch on paper is one inch of the drawing.
+  function renderLetterCanvas() {
+    const PX = PX_PER_INCH, W = 2550, H = 3300;   // 8.5 x 11 in at 300 dpi
+    const d = dpr(), k = 300 / PX;                 // device pixels per drawing unit
+    const x0 = -view.ox / view.scale, y0 = -view.oy / view.scale;
+    const savedView = view, savedSel = selected, savedMeasure = measure;
+    view = { scale: k / d, ox: -x0 * k / d, oy: -y0 * k / d };
+    selected = null;
+    measure = null;
+    preview = null;
+    canvas.width = W;
+    canvas.height = H;
+    for (const l of layers) layerCanvas(l.id);
+    for (const lc of layerCanvases.values()) { lc.width = W; lc.height = H; }
+    redrawInk();
+    const out = exportCanvas();
+    view = savedView;
+    selected = savedSel;
+    measure = savedMeasure;
+    resize();   // restores the screen size and redraws it
+    return out;
+  }
+
+  // A one-page PDF with a single JPEG image filling US Letter (612 x 792 points)
+  function buildLetterPdf(jpeg, W, H) {
+    const enc = s => new TextEncoder().encode(s);
+    const parts = [];
+    const offsets = [];
+    let len = 0;
+    const push = p => { parts.push(p); len += p.length; };
+    const obj = (n, body) => { offsets[n] = len; push(enc(`${n} 0 obj\n${body}\nendobj\n`)); };
+    push(enc('%PDF-1.4\n%âãÏÓ\n'));
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+    offsets[4] = len;
+    push(enc(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`));
+    push(jpeg);
+    push(enc('\nendstream\nendobj\n'));
+    const content = 'q 612 0 0 792 0 0 cm /Im0 Do Q';
+    obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+    const xref = len;
+    let table = 'xref\n0 6\n0000000000 65535 f \n';
+    for (let i = 1; i <= 5; i++) table += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+    push(enc(table + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`));
+    const out = new Uint8Array(len);
+    let p = 0;
+    for (const c of parts) { out.set(c, p); p += c.length; }
+    return out;
+  }
+
+  async function exportPDF() {
+    const page = renderLetterCanvas();
+    const blob = await new Promise(r => page.toBlob(r, 'image/jpeg', 0.92));
+    const jpeg = new Uint8Array(await blob.arrayBuffer());
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadFile(new File([buildLetterPdf(jpeg, 2550, 3300)], `drawing-letter-${stamp}.pdf`, { type: 'application/pdf' }));
+    showToast('PDF ready');
+  }
+  $('pdfBtn').onclick = exportPDF;
 
   function savePNG() {
     exportCanvas().toBlob(blob => {
