@@ -300,7 +300,7 @@
   <button id="dimLiveBtn" class="opt-btn">📏 Dimensions while drawing: Off</button>
   <button id="dimKeepBtn" class="opt-btn">Keep dimensions on drawing: Off</button>
   <p class="hint">Dimensions show the width and height of a rectangle or oval as you draw it. Keep them to leave them on the drawing.</p>
-  <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved.</p>
+  <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved. Select an arc, then drag its diamond handle on the far edge to reduce the bulge.</p>
 </aside>
 
 <!-- Grid drawer: grid on or off, spacing in inches or centimetres, snapping -->
@@ -397,7 +397,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.19.0</div>
+<div id="version">v0.20.2</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -408,7 +408,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.19.0';
+  const APP_VERSION = '0.20.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -536,9 +536,28 @@
 
   // Frame items are pictures, rectangles and ovals. They rotate about their centre.
   // For a rectangle or oval the centre is the midpoint of its two defining points.
-  const isFrame = s => !!s.image || s.kind === 'text' || s.shape === 'rect' || s.shape === 'oval';
+  // Arcs run from points[0] to points[1] (the chord). They bulge toward s.side by s.bulge, the
+  // distance from the chord to the apex (at most half the chord). No bulge stored = half circle.
+  const arcNormal = s => {
+    const [a, b] = s.points, dx = b.x - a.x, dy = b.y - a.y, k = (s.side || 1) / (Math.hypot(dx, dy) || 1);
+    return { x: -dy * k, y: dx * k };
+  };
+  const arcBulge = s => {
+    const [a, b] = s.points, half = Math.hypot(b.x - a.x, b.y - a.y) / 2;
+    return Math.min(half, Math.max(0, s.bulge ?? half));
+  };
+  // An arc's selection frame: the chord is the near edge and the apex lies mid-way along the far edge
+  const arcFrame = s => {
+    const [a, b] = s.points, n = arcNormal(s), h = arcBulge(s), M = mid(a, b);
+    return { cx: M.x + n.x * h / 2, cy: M.y + n.y * h / 2, w: Math.hypot(b.x - a.x, b.y - a.y), h, rot: Math.atan2(-n.x, n.y) };
+  };
+
+  // Frame items are pictures, rectangles, ovals, text and arcs. They rotate about their centre.
+  // For a rectangle or oval the centre is the midpoint of its two defining points.
+  const isFrame = s => !!s.image || s.kind === 'text' || s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc';
   function frameOf(s) {
     if (s.image) return s;
+    if (s.shape === 'arc') return arcFrame(s);
     if (s.kind === 'text') {
       const L = textLayout(s);
       return { cx: s.cx, cy: s.cy, w: L.w, h: L.h, rot: s.rot || 0 };
@@ -548,6 +567,13 @@
   }
   function applyFrame(s, f) {
     if (s.image) return { ...s, cx: f.cx, cy: f.cy, w: f.w, h: f.h, rot: f.rot };
+    if (s.shape === 'arc') {
+      // Rebuild the chord from the frame: near edge at local y = -h/2, apex on the far edge
+      const u = { x: Math.cos(f.rot), y: Math.sin(f.rot) }, v = { x: -u.y, y: u.x };
+      const h = Math.min(Math.max(0, f.h), f.w / 2);
+      const at = k => ({ x: f.cx + u.x * k * f.w / 2 - v.x * h / 2, y: f.cy + u.y * k * f.w / 2 - v.y * h / 2, p: 0.5 });
+      return { ...s, points: [at(-1), at(1)], side: 1, bulge: h };
+    }
     if (s.kind === 'text') {
       // Resizing a text box scales its font size; moving and turning leave the size as it is
       const k = f.w / textLayout(s).w;
@@ -616,16 +642,23 @@
     const [a, b] = s.points;
     c.beginPath();
     if (s.shape === 'arc') {
-      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
       if (len > 0) {
-        const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, r = len / 2;
-        const side = s.side || 1;
-        const thA = Math.atan2(a.y - cy, a.x - cx);
-        const thN = Math.atan2(dx * side, -dy * side);   // direction of the bulge
-        let diff = thN - thA;
-        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-        if (diff > 0) c.arc(cx, cy, r, thA, thA + Math.PI, false);
-        else c.arc(cx, cy, r, thA, thA - Math.PI, true);
+        const h = arcBulge(s), n = arcNormal(s), M = mid(a, b), L = len / 2;
+        if (h < 0.01) {
+          c.moveTo(a.x, a.y);
+          c.lineTo(b.x, b.y);
+        } else {
+          // The circle through both ends and the apex
+          const R = (L * L + h * h) / (2 * h);
+          const O = { x: M.x + n.x * (h - R), y: M.y + n.y * (h - R) };
+          const P = { x: M.x + n.x * h, y: M.y + n.y * h };
+          const TWO = Math.PI * 2, norm = t => ((t % TWO) + TWO) % TWO;
+          const thA = Math.atan2(a.y - O.y, a.x - O.x), thB = Math.atan2(b.y - O.y, b.x - O.x);
+          const thP = Math.atan2(P.y - O.y, P.x - O.x);
+          // Sweep from a to b the way that passes the apex
+          c.arc(O.x, O.y, R, thA, thB, norm(thP - thA) > norm(thB - thA));
+        }
       }
       if (closed) c.closePath();   // closing chord back to the start point
       return;
@@ -872,6 +905,18 @@
         c.fill();
         c.stroke();
       }
+      if (selected.shape === 'arc') {
+        // Bulge handle: a diamond on the far edge, which changes only the depth of the arc
+        const ap = localToWorld(f, 0, f.h / 2), k = 8 / s;
+        c.beginPath();
+        c.moveTo(ap.x, ap.y - k);
+        c.lineTo(ap.x + k, ap.y);
+        c.lineTo(ap.x, ap.y + k);
+        c.lineTo(ap.x - k, ap.y);
+        c.closePath();
+        c.fill();
+        c.stroke();
+      }
     } else {
       const b = rawBox(selected);
       const pad = (selected.size || 0) / 2 + 3 / s;
@@ -1042,6 +1087,10 @@
       const f = frameOf(selected);
       const rp = localToWorld(f, 0, -f.h / 2 - 30 / s);
       if (Math.hypot(rp.x - pt.x, rp.y - pt.y) <= r) return { kind: 'rotate' };
+      if (selected.shape === 'arc') {
+        const ap = localToWorld(f, 0, f.h / 2);
+        if (Math.hypot(ap.x - pt.x, ap.y - pt.y) <= r) return { kind: 'bulge' };
+      }
       for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
         const p = localToWorld(f, sx * f.w / 2, sy * f.h / 2);
         if (Math.abs(p.x - pt.x) <= r && Math.abs(p.y - pt.y) <= r) return { kind: 'resize', sx, sy };
@@ -1080,6 +1129,8 @@
   }
 
   function updateDrag(q) {
+    // Only a real move counts for undo; a tap to select must not add an empty step
+    if (Math.hypot(q.x - drag.start.x, q.y - drag.start.y) > 0.5 / view.scale) drag.moved = true;
     if (isFrame(drag.ref)) { updatePictureDrag(q); return; }
     const d = drag, b = d.box;
     let fn;
@@ -1124,6 +1175,14 @@
       let rot = o.rot + Math.atan2(q.y - o.cy, q.x - o.cx) - Math.atan2(d.start.y - o.cy, d.start.x - o.cx);
       if (snap) { const step = Math.PI / 12; rot = Math.round(rot / step) * step; }   // 15 degree steps
       item = applyFrame(ref, { ...o, rot });
+    } else if (d.kind === 'bulge') {
+      // Only the far edge moves: the chord stays put and the apex follows the pointer
+      const v = { x: -Math.sin(o.rot), y: Math.cos(o.rot) };
+      let h = (q.x - o.cx) * v.x + (q.y - o.cy) * v.y + o.h / 2;
+      h = Math.min(Math.max(0, h), o.w / 2);
+      if (snap) h = Math.min(o.w / 2, Math.max(0, Math.round(h / GRID) * GRID));
+      const k = (h - o.h) / 2;
+      item = applyFrame(ref, { ...o, cx: o.cx + v.x * k, cy: o.cy + v.y * k, h });
     } else {
       const { sx, sy } = d.handle;
       const src = { cx: o.cx, cy: o.cy, w: o.w, h: o.h, rot: o.rot };
@@ -1143,7 +1202,7 @@
   }
 
   function finishDrag() {
-    if (strokes !== drag.before.items) pushHistory(drag.before);
+    if (strokes !== drag.before.items && drag.moved) pushHistory(drag.before);
     drag = null;
     activePointerId = null;
     scheduleRender(true);
@@ -1353,6 +1412,14 @@
       return;
     }
     if (!current || e.pointerId !== activePointerId) return;
+    // A tap with a shape tool makes no shape
+    if (current.shape && Math.hypot(current.points[1].x - current.points[0].x, current.points[1].y - current.points[0].y) < 1) {
+      current = null;
+      activePointerId = null;
+      preview = null;
+      scheduleRender(false);
+      return;
+    }
     pushHistory(snapshot());
     // Dimension lines stay on the drawing only if "keep" is on
     strokes = [...strokes, { ...current, dims: !!current.dims && dimKeep }];
