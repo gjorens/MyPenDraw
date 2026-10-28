@@ -427,7 +427,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.27.1</div>
+<div id="version">v0.27.2</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -444,7 +444,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.27.1';
+  const APP_VERSION = '0.27.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -618,6 +618,42 @@
       handle: { x: P.x + ux * 18 / sc, y: P.y + uy * 18 / sc }
     };
   }
+  // Turns an arc about the centre of its circle. Both ends move round the circle, so its shape stays the same.
+  // The centre handle turns the arc as the pointer orbits the centre, starting from the first point clear of it.
+  function arcRotateItem(ref, d, q) {
+    const O = d.centre;
+    let ang;
+    if (d.kind === 'centre') {
+      if (d.turnFrom === undefined) {
+        if (Math.hypot(q.x - O.x, q.y - O.y) < 20 / view.scale) return ref;
+        d.turnFrom = Math.atan2(q.y - O.y, q.x - O.x);
+      }
+      ang = Math.atan2(q.y - O.y, q.x - O.x) - d.turnFrom;
+    } else {
+      ang = Math.atan2(q.y - O.y, q.x - O.x) - Math.atan2(d.start.y - O.y, d.start.x - O.x);
+    }
+    if (snap) { const step = Math.PI / 12; ang = Math.round(ang / step) * step; }
+    const co = Math.cos(ang), si = Math.sin(ang);
+    return {
+      ...ref,
+      points: ref.points.map(p => ({
+        ...p,
+        x: O.x + (p.x - O.x) * co - (p.y - O.y) * si,
+        y: O.y + (p.x - O.x) * si + (p.y - O.y) * co
+      }))
+    };
+  }
+
+  // A locked arc keeps its centre where it was locked: after any edit it is moved back there
+  function keepCentre(item) {
+    if (item.shape !== 'arc' || !item.lock) return item;
+    const g = arcCircle(item);
+    if (!g) return item;
+    const dx = item.lock.x - g.O.x, dy = item.lock.y - g.O.y;
+    if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return item;
+    return { ...item, points: item.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) };
+  }
+
   // Starts moving end k around the circle. The circle and the other end stay where they are.
   function arcSweepStart(s, k, pt) {
     const g = arcCircle(s);
@@ -1034,18 +1070,22 @@
           c.moveTo(rd.from.x, rd.from.y);
           c.lineTo(rd.handle.x, rd.handle.y);
           c.stroke();
-          if (end === 0) {
-            // Mark the centre where the two radials bisect
-            c.beginPath();
-            c.arc(rd.centre.x, rd.centre.y, 3 / s, 0, Math.PI * 2);
-            c.fill();
-            c.stroke();
-          }
           c.lineWidth = 2 / s;
           c.beginPath();
           c.arc(rd.handle.x, rd.handle.y, 6 / s, 0, Math.PI * 2);
           c.fill();
           c.stroke();
+        }
+        // Centre handle: drag to turn the arc about its centre; a tap locks or unlocks the centre
+        const gc = arcCircle(selected);
+        if (gc) {
+          c.fillStyle = selected.lock ? '#1a3d9c' : '#ffffff';
+          c.lineWidth = 2 / s;
+          c.beginPath();
+          c.arc(gc.O.x, gc.O.y, 6 / s, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+          c.fillStyle = '#ffffff';
         }
       }
     } else {
@@ -1258,6 +1298,8 @@
         if (Math.hypot(ap.x - pt.x, ap.y - pt.y) <= r) return { kind: 'bulge' };
       }
       if (selected.shape === 'arc') {
+        const g = arcCircle(selected);
+        if (g && Math.hypot(g.O.x - pt.x, g.O.y - pt.y) <= r) return { kind: 'centre' };
         for (const end of [0, 1]) {
           const rd = arcRadial(selected, end);
           if (rd && Math.hypot(rd.handle.x - pt.x, rd.handle.y - pt.y) <= r) return { kind: 'sweep', end };
@@ -1293,6 +1335,10 @@
       anchor: handle && handle.anchor ? handle.anchor : null
     };
     if (kind === 'sweep') drag.sweep = arcSweepStart(item, handle.end, pt);
+    if (item.shape === 'arc' && (kind === 'rotate' || kind === 'centre')) {
+      const g = arcCircle(item);
+      if (g) drag.centre = g.O;
+    }
     if (isFrame(item)) {
       drag.orig = { ...frameOf(item) };
     } else {
@@ -1344,6 +1390,9 @@
       let cx = o.cx + (q.x - d.start.x), cy = o.cy + (q.y - d.start.y);
       if (snap) { cx = Math.round(cx / GRID) * GRID; cy = Math.round(cy / GRID) * GRID; }
       item = applyFrame(ref, { ...o, cx, cy });
+    } else if ((d.kind === 'rotate' || d.kind === 'centre') && d.centre) {
+      // Arcs turn about the centre of their circle
+      item = arcRotateItem(ref, d, q);
     } else if (d.kind === 'rotate') {
       let rot = o.rot + Math.atan2(q.y - o.cy, q.x - o.cx) - Math.atan2(d.start.y - o.cy, d.start.x - o.cx);
       if (snap) { const step = Math.PI / 12; rot = Math.round(rot / step) * step; }   // 15 degree steps
@@ -1378,13 +1427,26 @@
       const cy = F.y + (sx * w / 2) * sn + (sy * h / 2) * c;
       item = applyFrame(ref, { cx, cy, w, h, rot: o.rot });
     }
+    item = keepCentre(item);
     strokes = d.before.items.map(s => (s === ref ? item : s));
     selected = item;
     scheduleRender(true);
   }
 
+  // A tap on an arc's centre handle locks or unlocks its centre
+  function toggleArcLock(ref) {
+    const g = arcCircle(ref);
+    if (!g) return;
+    pushHistory(drag.before);
+    const item = { ...ref };
+    if (item.lock) delete item.lock; else item.lock = { x: g.O.x, y: g.O.y };
+    strokes = strokes.map(s => (s === ref ? item : s));
+    selected = item;
+  }
+
   function finishDrag() {
-    if (strokes !== drag.before.items && drag.moved) pushHistory(drag.before);
+    if (drag.kind === 'centre' && !drag.moved) toggleArcLock(drag.ref);
+    else if (strokes !== drag.before.items && drag.moved) pushHistory(drag.before);
     drag = null;
     activePointerId = null;
     scheduleRender(true);
