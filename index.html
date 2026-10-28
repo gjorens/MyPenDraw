@@ -424,7 +424,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.23.2</div>
+<div id="version">v0.23.3</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -441,7 +441,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.23.2';
+  const APP_VERSION = '0.23.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -450,7 +450,7 @@
   const SHAPES = ['rect', 'oval', 'arc'];
   const SHAPE_ICONS = { rect: '▭', oval: '○', arc: '◠' };
   const MIN_SCALE = 0.5, MAX_SCALE = 6;
-  const HISTORY_LIMIT = 200;
+  const HISTORY_LIMIT = 15;   // undo steps kept; older steps are dropped
   const CUSTOM_KEY = 'pendraw-custom-colors';
   const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
   const IMPORT_MAX_PX = 2048;     // longest side of the stored bitmap
