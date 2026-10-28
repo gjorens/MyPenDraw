@@ -6,7 +6,8 @@ Current version: see the number shown in the bottom-right corner of the app.
 
 - Pen, eraser, six fixed colours and six custom colours (hold to edit), with a detachable colour window
 - Layers: show/hide, reorder, opacity. The grid is a special bottom layer.
-- Shapes: rectangle, oval, arc. Arcs have a bulge handle to reduce their depth.
+- Shapes: rectangle, oval, arc, triangle. Arcs have a bulge handle to change their depth, and a radial handle at each end to move that end round the circle (up to about 286 degrees, and past the other end to a reversed arc).
+- Dimension lines on rectangles, ovals, arcs and triangles: Dims shows them on all shapes, Shape dims shows them on the selected one.
 - Fill, text (font, size, colour, bold), and pictures (SVG, PNG, JPEG, WebP, GIF)
 - Select, move, resize, rotate, cut, copy, paste, delete
 - Grid: inches or centimetres, snap to grid, spacing changeable at any time

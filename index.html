@@ -427,7 +427,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.26.0</div>
+<div id="version">v0.27.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -444,7 +444,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.26.0';
+  const APP_VERSION = '0.27.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -588,6 +588,67 @@
     const [a, b] = s.points, n = arcNormal(s), h = arcBulge(s), M = mid(a, b);
     return { cx: M.x + n.x * h / 2, cy: M.y + n.y * h / 2, w: Math.hypot(b.x - a.x, b.y - a.y), h, rot: Math.atan2(-n.x, n.y) };
   };
+
+  // The circle an arc lies on, used by its radial handles. Null when the arc is flat.
+  // theta is the signed sweep from end 0 to end 1; positive runs counter-clockwise.
+  const TWO_PI = Math.PI * 2;
+  const ARC_SWEEP_MAX = 4 * Math.atan(3);   // the 3 half-chord bulge limit allows about 286 degrees
+  const wrapAngle = t => Math.atan2(Math.sin(t), Math.cos(t));
+  function arcCircle(s) {
+    const [a, b] = s.points, n = arcNormal(s), h = arcBulge(s), L = Math.hypot(b.x - a.x, b.y - a.y) / 2;
+    if (h < 0.5 || L < 0.5) return null;
+    const M = mid(a, b), R = (L * L + h * h) / (2 * h);
+    const O = { x: M.x + n.x * (h - R), y: M.y + n.y * (h - R) };
+    const phiA = Math.atan2(a.y - O.y, a.x - O.x), phiB = Math.atan2(b.y - O.y, b.x - O.x);
+    const phiP = Math.atan2(M.y + n.y * h - O.y, M.x + n.x * h - O.x);
+    const ccw = ((phiB - phiA) % TWO_PI + TWO_PI) % TWO_PI;
+    const theta = (((phiP - phiA) % TWO_PI + TWO_PI) % TWO_PI) < ccw ? ccw : ccw - TWO_PI;
+    return { O, R, phiA, theta };
+  }
+  // The radial through end k: a short line passing through the end, with its handle beyond
+  function arcRadial(s, k) {
+    const g = arcCircle(s);
+    if (!g) return null;
+    const P = s.points[k], sc = view.scale;
+    const ux = (P.x - g.O.x) / g.R, uy = (P.y - g.O.y) / g.R;
+    return {
+      from: { x: P.x - ux * 12 / sc, y: P.y - uy * 12 / sc },
+      handle: { x: P.x + ux * 18 / sc, y: P.y + uy * 18 / sc }
+    };
+  }
+  // Starts moving end k around the circle. The circle and the other end stay where they are.
+  function arcSweepStart(s, k, pt) {
+    const g = arcCircle(s);
+    if (!g) return null;
+    const phiB = g.phiA + g.theta;
+    return {
+      O: g.O, R: g.R, k, phiA: g.phiA, phiB,
+      phi: k === 0 ? g.phiA : phiB,
+      last: Math.atan2(pt.y - g.O.y, pt.x - g.O.x),
+      orig: s.points.map(p => ({ ...p }))
+    };
+  }
+  // The arc with its moving end at the pointer's angle on the circle
+  function arcSweepItem(s, d, q) {
+    const psi = Math.atan2(q.y - d.O.y, q.x - d.O.x);
+    d.phi += wrapAngle(psi - d.last);
+    d.last = psi;
+    const raw = d.k === 0 ? d.phiB - d.phi : d.phi - d.phiA;
+    const t = Math.max(-ARC_SWEEP_MAX, Math.min(ARC_SWEEP_MAX, raw));
+    if (t !== raw) d.phi = d.k === 0 ? d.phiB - t : d.phiA + t;
+    const phiA = d.k === 0 ? d.phi : d.phiA, phiB = d.k === 1 ? d.phi : d.phiB;
+    const at = ang => ({ x: d.O.x + d.R * Math.cos(ang), y: d.O.y + d.R * Math.sin(ang) });
+    const A = d.k === 0 ? at(phiA) : d.orig[0], B = d.k === 1 ? at(phiB) : d.orig[1];
+    const P = at(phiA + (phiB - phiA) / 2);   // the apex lies mid-way round the sweep
+    const M = mid(A, B), dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy) || 1;
+    const hs = ((P.x - M.x) * -dy + (P.y - M.y) * dx) / len;   // signed depth of the apex from the chord
+    return {
+      ...s,
+      points: [{ ...d.orig[0], ...A }, { ...d.orig[1], ...B }],
+      side: hs < 0 ? -1 : 1,
+      bulge: Math.abs(hs)
+    };
+  }
 
   // Frame items are pictures, rectangles, ovals, text and arcs. They rotate about their centre.
   // For a rectangle or oval the centre is the midpoint of its two defining points.
@@ -962,6 +1023,21 @@
         c.closePath();
         c.fill();
         c.stroke();
+        // Radial handles: each end of the arc can be moved around its circle
+        for (const end of [0, 1]) {
+          const rd = arcRadial(selected, end);
+          if (!rd) continue;
+          c.lineWidth = 1.5 / s;
+          c.beginPath();
+          c.moveTo(rd.from.x, rd.from.y);
+          c.lineTo(rd.handle.x, rd.handle.y);
+          c.stroke();
+          c.lineWidth = 2 / s;
+          c.beginPath();
+          c.arc(rd.handle.x, rd.handle.y, 6 / s, 0, Math.PI * 2);
+          c.fill();
+          c.stroke();
+        }
       }
     } else {
       const b = rawBox(selected);
@@ -1172,6 +1248,12 @@
         const ap = localToWorld(f, 0, f.h / 2);
         if (Math.hypot(ap.x - pt.x, ap.y - pt.y) <= r) return { kind: 'bulge' };
       }
+      if (selected.shape === 'arc') {
+        for (const end of [0, 1]) {
+          const rd = arcRadial(selected, end);
+          if (rd && Math.hypot(rd.handle.x - pt.x, rd.handle.y - pt.y) <= r) return { kind: 'sweep', end };
+        }
+      }
       for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
         const p = localToWorld(f, sx * f.w / 2, sy * f.h / 2);
         if (Math.abs(p.x - pt.x) <= r && Math.abs(p.y - pt.y) <= r) return { kind: 'resize', sx, sy };
@@ -1201,6 +1283,7 @@
       handle,
       anchor: handle && handle.anchor ? handle.anchor : null
     };
+    if (kind === 'sweep') drag.sweep = arcSweepStart(item, handle.end, pt);
     if (isFrame(item)) {
       drag.orig = { ...frameOf(item) };
     } else {
@@ -1256,6 +1339,9 @@
       let rot = o.rot + Math.atan2(q.y - o.cy, q.x - o.cx) - Math.atan2(d.start.y - o.cy, d.start.x - o.cx);
       if (snap) { const step = Math.PI / 12; rot = Math.round(rot / step) * step; }   // 15 degree steps
       item = applyFrame(ref, { ...o, rot });
+    } else if (d.kind === 'sweep') {
+      // One end moves around the circle; the circle and the other end stay put
+      item = arcSweepItem(ref, d.sweep, q);
     } else if (d.kind === 'bulge') {
       // Only the far edge moves: the chord stays put and the apex follows the pointer.
       // Past the chord the apex moves to the other side, so the frame turns to face it.
