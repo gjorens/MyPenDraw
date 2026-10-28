@@ -98,6 +98,10 @@
   .bar-btn:active { background: #e6e6e6; }
   .bar-btn.open { border: 2.5px solid #111; }
   .bar-spacer { flex: 1; }
+  .text-select {
+    width: 100%; height: 44px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
+    font-size: 16px; padding: 0 8px; margin-bottom: 8px; color: #111;
+  }
 
   /* ---------- layers panel ---------- */
   #layerPanel {
@@ -270,13 +274,31 @@
 <!-- Text drawer: type words, then tap the canvas to place them -->
 <aside class="drawer" id="drawer-text" aria-label="Text">
   <h3>Text <button class="close" data-close aria-label="Close">✕</button></h3>
+  <p id="textTarget" class="hint"></p>
   <div class="sub">Words</div>
   <textarea id="textInput" class="text-box" rows="4" maxlength="300" placeholder="Type your text"></textarea>
+  <div class="sub">Font</div>
+  <select id="textFont" class="text-select">
+    <option value="sans">System</option>
+    <option value="serif">Serif</option>
+    <option value="round">Rounded</option>
+    <option value="mono">Monospace</option>
+    <option value="script">Script</option>
+  </select>
   <div class="sub">Size <span id="textSizeLabel">40</span></div>
-  <input id="textSize" type="range" min="12" max="160" value="40" style="width:100%;accent-color:var(--accent)">
+  <input id="textSize" type="range" min="8" max="300" value="40" style="width:100%;accent-color:var(--accent)">
   <div class="sub">Style</div>
   <button id="textBold" class="opt-btn">B  Bold: Off</button>
-  <p class="hint">Tap the canvas to place the text, in the current colour. It becomes one picture, so you can move, resize and rotate it but not edit the words. To change them, undo and place it again.</p>
+  <div class="sub">Colour</div>
+  <div class="grid-sw">
+    <button class="swatch" data-group="color" data-color="#111111" style="background:#111" title="Black"></button>
+    <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131" title="Red"></button>
+    <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6" title="Blue"></button>
+    <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
+    <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
+    <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
+  </div>
+  <p class="hint">Changes apply to the selected text. With nothing selected, they set the next text you place. Custom colours are in the Colour drawer.</p>
 </aside>
 
 <!-- Layers float on the right -->
@@ -296,13 +318,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.12.0</div>
+<div id="version">v0.13.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.12.0';
+  const APP_VERSION = '0.13.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -353,7 +375,6 @@
   let gesture = null;        // pinch state
   let rafId = 0, pendingFull = false;
   let openDrawer = null;     // 'colors' | 'pen' | 'shapes' | 'import' | 'text' | null
-  let textBold = false;      // text tool style
 
   // ---------- custom colours (saved on this device) ----------
   function loadCustom() {
@@ -421,14 +442,23 @@
 
   // Frame items are pictures, rectangles and ovals. They rotate about their centre.
   // For a rectangle or oval the centre is the midpoint of its two defining points.
-  const isFrame = s => !!s.image || s.shape === 'rect' || s.shape === 'oval';
+  const isFrame = s => !!s.image || s.kind === 'text' || s.shape === 'rect' || s.shape === 'oval';
   function frameOf(s) {
     if (s.image) return s;
+    if (s.kind === 'text') {
+      const L = textLayout(s);
+      return { cx: s.cx, cy: s.cy, w: L.w, h: L.h, rot: s.rot || 0 };
+    }
     const [a, b] = s.points;
     return { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y), rot: s.rot || 0 };
   }
   function applyFrame(s, f) {
     if (s.image) return { ...s, cx: f.cx, cy: f.cy, w: f.w, h: f.h, rot: f.rot };
+    if (s.kind === 'text') {
+      // Resizing a text box scales its font size; moving and turning leave the size as it is
+      const k = f.w / textLayout(s).w;
+      return { ...s, cx: f.cx, cy: f.cy, rot: f.rot, size: Math.max(4, Math.round(s.size * k * 10) / 10) };
+    }
     return {
       ...s,
       rot: f.rot,
@@ -544,6 +574,7 @@
 
   function drawStroke(c, stroke) {
     if (stroke.fill) return;                 // fills are applied to layer ink in redrawInk
+    if (stroke.kind === 'text') { drawText(c, stroke); return; }
     if (stroke.image) { drawPicture(c, stroke); return; }
     if (stroke.shape) { drawShape(c, stroke); return; }
     const pts = stroke.points;
@@ -986,6 +1017,7 @@
 
     // Select: grab a handle to resize or rotate, or an object to move; tap empty space to deselect
     if (tool === 'select') {
+      endTextEdit();
       activePointerId = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
       const handle = handleAt(raw);
@@ -1115,6 +1147,7 @@
   }
 
   function restore(s) {
+    endTextEdit();
     strokes = s.items;
     layers = s.layers;
     if (!strokes.includes(selected)) selected = null;
@@ -1347,34 +1380,87 @@
   };
 
   // ---------- text ----------
-  // Renders text to a bitmap at twice the size, so it stays sharp when zoomed.
-  // The result is a picture item, so it moves, resizes and rotates like one.
-  function renderText(text, size, bold, fill) {
-    const K = 2;
-    const font = `${bold ? 'bold ' : ''}${size * K}px -apple-system, system-ui, sans-serif`;
-    const probe = document.createElement('canvas').getContext('2d');
-    probe.font = font;
-    const lines = text.split('\n').slice(0, 20);
-    const lineH = size * K * 1.25;
-    const textW = Math.max(...lines.map(l => probe.measureText(l).width), size * K);
-    const pad = size * K * 0.2;
-    const c = document.createElement('canvas');
-    c.width = Math.ceil(textW + pad * 2);
-    c.height = Math.ceil(lineH * lines.length + pad * 2);
-    const cx = c.getContext('2d');
-    cx.font = font;
-    cx.fillStyle = fill;
-    cx.textBaseline = 'top';
-    lines.forEach((l, i) => cx.fillText(l, pad, pad + i * lineH));
-    return { canvas: c, w: c.width / K, h: c.height / K };
+  // Text items keep their words and style, and are drawn live at the current zoom.
+  // Corner handles change the font size. Colour and font apply to the selected text.
+  const FONTS = {
+    sans: '-apple-system, system-ui, sans-serif',
+    serif: 'Georgia, "Times New Roman", serif',
+    round: 'ui-rounded, "SF Pro Rounded", system-ui, sans-serif',
+    mono: 'ui-monospace, Menlo, monospace',
+    script: '"Snell Roundhand", "Brush Script MT", cursive'
+  };
+  const textDefaults = { text: '', font: 'sans', size: 40, bold: false };   // for the next text placed
+  const measureCtx = document.createElement('canvas').getContext('2d');
+  let textEditPending = false;   // true while one typing or slider edit is in progress
+
+  function textFont(s) {
+    return `${s.bold ? 'bold ' : ''}${s.size}px ${FONTS[s.font] || FONTS.sans}`;
+  }
+
+  // Lines and box size of a text item, in drawing units
+  function textLayout(s) {
+    const lines = String(s.text).split('\n').slice(0, 20);
+    const pad = s.size * 0.2, lineH = s.size * 1.25;
+    measureCtx.font = textFont(s);
+    const tw = Math.max(s.size, ...lines.map(l => measureCtx.measureText(l).width));
+    return { lines, pad, lineH, w: tw + pad * 2, h: lines.length * lineH + pad * 2 };
+  }
+
+  function drawText(c, s) {
+    const L = textLayout(s);
+    c.save();
+    c.translate(s.cx, s.cy);
+    c.rotate(s.rot || 0);
+    c.font = textFont(s);
+    c.fillStyle = s.color;
+    c.textBaseline = 'top';
+    c.textAlign = 'left';
+    L.lines.forEach((l, i) => c.fillText(l, -L.w / 2 + L.pad, -L.h / 2 + L.pad + i * L.lineH));
+    c.restore();
+  }
+
+  // Changes the selected text item. The first change of an edit saves one undo step.
+  function editSelectedText(patch) {
+    if (!selected || selected.kind !== 'text') return;
+    if (!textEditPending) { pushHistory(snapshot()); textEditPending = true; }
+    const item = { ...selected, ...patch };
+    strokes = strokes.map(s => (s === selected ? item : s));
+    selected = item;
+    scheduleRender(true);
+    updateButtons();
+  }
+
+  function endTextEdit() { textEditPending = false; }
+
+  // Applies to the selected text, or to the defaults for the next text placed
+  function textPatch(patch) {
+    if (selected && selected.kind === 'text') editSelectedText(patch);
+    else Object.assign(textDefaults, patch);
+  }
+
+  // Shows the selected text's settings, or the defaults when nothing text is selected
+  function syncTextDrawer() {
+    const isText = !!selected && selected.kind === 'text';
+    const t = isText ? selected : textDefaults;
+    $('textInput').value = t.text;
+    $('textFont').value = t.font;
+    $('textSize').value = t.size;
+    $('textSizeLabel').textContent = t.size;
+    $('textBold').textContent = t.bold ? 'B  Bold: On' : 'B  Bold: Off';
+    $('textBold').classList.toggle('active', !!t.bold);
+    $('textTarget').textContent = isText
+      ? 'Editing the selected text.'
+      : 'New text. Tap the canvas to place it.';
   }
 
   function placeText(at) {
-    const text = $('textInput').value;
-    if (!text.trim()) { showToast('Type some text in the Text drawer first'); return; }
-    const t = renderText(text.slice(0, 300), Number($('textSize').value), textBold, color);
+    if (!textDefaults.text.trim()) { showToast('Type some text in the Text drawer first'); return; }
+    const item = {
+      kind: 'text', layer: activeLayer, text: textDefaults.text.slice(0, 300),
+      font: textDefaults.font, size: textDefaults.size, bold: textDefaults.bold,
+      color, cx: at.x, cy: at.y, rot: 0
+    };
     pushHistory(snapshot());
-    const item = { layer: activeLayer, image: t.canvas, cx: at.x, cy: at.y, w: t.w, h: t.h, rot: 0 };
     strokes = [...strokes, item];
     selected = item;
     setTool('select');   // ready to move, resize or rotate straight away
@@ -1386,11 +1472,19 @@
     if (L && !L.visible) showToast('Text placed on a hidden layer');
   }
 
-  $('textSize').addEventListener('input', e => { $('textSizeLabel').textContent = e.target.value; });
-  $('textBold').onclick = e => {
-    textBold = !textBold;
-    e.currentTarget.textContent = textBold ? 'B  Bold: On' : 'B  Bold: Off';
-    e.currentTarget.classList.toggle('active', textBold);
+  $('textInput').addEventListener('input', e => textPatch({ text: e.target.value }));
+  $('textInput').addEventListener('change', endTextEdit);
+  $('textFont').addEventListener('change', e => { textPatch({ font: e.target.value }); endTextEdit(); });
+  $('textSize').addEventListener('input', e => {
+    $('textSizeLabel').textContent = e.target.value;
+    textPatch({ size: Number(e.target.value) });
+  });
+  $('textSize').addEventListener('change', endTextEdit);
+  $('textBold').onclick = () => {
+    const cur = selected && selected.kind === 'text' ? selected.bold : textDefaults.bold;
+    textPatch({ bold: !cur });
+    endTextEdit();
+    syncTextDrawer();
   };
 
   // ---------- export ----------
@@ -1484,6 +1578,7 @@
   }
 
   function setTool(t) {
+    endTextEdit();
     tool = t;
     if (t !== 'select') selected = null;
     syncTools();
@@ -1509,6 +1604,7 @@
     document.querySelectorAll('[data-drawer]').forEach(b => {
       b.classList.toggle('open', b.dataset.drawer === openDrawer);
     });
+    if (openDrawer === 'text') syncTextDrawer();
   }
 
   document.querySelectorAll('[data-drawer]').forEach(b => {
@@ -1516,7 +1612,8 @@
       const name = b.dataset.drawer;
       // Opening a drawer for a tool selects that tool
       if (name === 'pen') setTool('pen');
-      if (name === 'text') setTool('text');
+      // With text selected, the Text button keeps the selection for editing
+      if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
       if (name === 'shapes' && !SHAPES.includes(tool)) setTool('rect');
       toggleDrawer(name);
     };
@@ -1530,13 +1627,18 @@
   function pickColor(c, el) {
     color = c;
     $('colorDot').style.background = c;
+    if (selected && selected.kind === 'text' && tool === 'select') {
+      editSelectedText({ color: c });   // recolour the selected text
+      setGroup('color', el);
+      return;
+    }
     if (tool === 'eraser' || tool === 'select') setTool('pen');
     setGroup('color', el);
   }
 
   // Six fixed colours
   document.querySelectorAll('button.swatch').forEach(btn => {
-    btn.onclick = () => pickColor(btn.dataset.color, btn);
+    btn.onclick = () => { pickColor(btn.dataset.color, btn); endTextEdit(); };
   });
 
   // Six custom colours: tap to use, then edit in the native RGB picker
@@ -1544,6 +1646,7 @@
   customInputs.forEach((inp, i) => {
     inp.value = customColors[i];
     inp.addEventListener('click', () => pickColor(inp.value, inp));
+    inp.addEventListener('change', endTextEdit);
     inp.addEventListener('input', () => {
       customColors[i] = inp.value;
       saveCustom(customColors);
