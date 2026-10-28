@@ -30,6 +30,18 @@
 
   #stage { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
+
+  #version {
+    position: fixed; right: 10px; bottom: 8px; z-index: 10;
+    font-size: 12px; color: #666; background: rgba(255,255,255,0.8);
+    padding: 3px 8px; border-radius: 6px; pointer-events: none;
+  }
+  #toast {
+    position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
+    background: #222; color: #fff; padding: 8px 14px; border-radius: 8px;
+    font-size: 14px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 20;
+  }
+  #toast.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -52,14 +64,22 @@
   <button id="redoBtn" title="Redo" disabled>↷</button>
   <button id="clearBtn" title="Clear">🗑</button>
   <button id="saveBtn" title="Save PNG">💾</button>
+  <button id="copyBtn" title="Copy drawing to clipboard">📋</button>
 </div>
 
 <div id="stage">
   <canvas id="c"></canvas>
 </div>
 
+<div id="version">v0.2.0</div>
+<div id="toast"></div>
+
 <script>
 (() => {
+  // Bump this when you make a change you want to track
+  const APP_VERSION = '0.2.0';
+  document.getElementById('version').textContent = 'v' + APP_VERSION;
+
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
@@ -232,6 +252,31 @@
     }, 'image/png');
   }
 
+  // ---------- copy to clipboard ----------
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  async function copyDrawing() {
+    if (!navigator.clipboard || !window.ClipboardItem) {
+      showToast('Copy not supported here. Use 💾 to save instead.');
+      return;
+    }
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        showToast('Drawing copied to clipboard');
+      } catch (err) {
+        console.error(err);
+        showToast('Copy failed. Try 💾 to save instead.');
+      }
+    }, 'image/png');
+  }
+
   // ---------- toolbar ----------
   function setActive(el) {
     document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
@@ -263,6 +308,7 @@
     if (confirm('Clear the whole drawing? You can still undo.')) clearAll();
   };
   document.getElementById('saveBtn').onclick = savePNG;
+  document.getElementById('copyBtn').onclick = copyDrawing;
 
   // Keyboard shortcuts for when a keyboard is attached
   window.addEventListener('keydown', e => {
