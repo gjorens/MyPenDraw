@@ -372,7 +372,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.18.2</div>
+<div id="version">v0.18.3</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -383,7 +383,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.18.2';
+  const APP_VERSION = '0.18.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1162,8 +1162,17 @@
   }
 
   // ---------- pointer handling ----------
+  // A finger that starts at the screen edge is usually the iPad's swipe gesture (Home, Control
+  // Centre, app switching). iPadOS takes over the gesture, but the page still gets the first
+  // touch points, which would draw a stray line. The Pencil is not affected.
+  const EDGE_IGNORE_PX = 48;
+  const startsAtEdge = e => e.clientX < EDGE_IGNORE_PX || e.clientY < EDGE_IGNORE_PX ||
+    e.clientX > window.innerWidth - EDGE_IGNORE_PX || e.clientY > window.innerHeight - EDGE_IGNORE_PX;
+
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'pen') penInUse = true;
+
+    if (e.pointerType === 'touch' && startsAtEdge(e)) return;   // not tracked, so it never draws or pinches
 
     if (e.pointerType === 'touch') {
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
