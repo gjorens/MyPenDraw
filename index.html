@@ -136,6 +136,19 @@
     width: max-content; max-width: 88vw; text-align: center;
   }
   #toast.show { opacity: 1; }
+  #choiceDialog {
+    border: 2px solid #8a8a8a; border-radius: 14px; padding: 18px; width: min(360px, 88vw);
+    background: #fff; color: #111; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+  #choiceDialog::backdrop { background: rgba(0,0,0,0.35); }
+  .choice-msg { font-size: 17px; line-height: 1.35; margin: 0 0 16px; }
+  .choice-btns { display: flex; gap: 8px; }
+  .choice-btns button {
+    flex: 1; height: 48px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
+    font-size: 17px; font-weight: 600; color: #111; cursor: pointer;
+  }
+  .choice-btns button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .choice-btns button.danger { color: #b00020; border-color: #b00020; }
 </style>
 </head>
 <body>
@@ -359,13 +372,18 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.18.1</div>
+<div id="version">v0.18.2</div>
 <div id="toast"></div>
+<!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
+<dialog id="choiceDialog">
+  <p class="choice-msg" id="choiceMsg"></p>
+  <div class="choice-btns" id="choiceBtns"></div>
+</dialog>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.18.1';
+  const APP_VERSION = '0.18.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1756,13 +1774,52 @@
   }
 
   // Starts an empty project. With work on the page, it offers to save first.
+  // Shows a dialog with one button per choice. Resolves with the chosen label,
+  // or null if the dialog is dismissed (Escape or the system close).
+  function askChoice(message, choices) {
+    const dlg = $('choiceDialog');
+    return new Promise(resolve => {
+      let done = false;
+      const finish = value => {
+        if (done) return;
+        done = true;
+        if (dlg.open) dlg.close();
+        resolve(value);
+      };
+      $('choiceMsg').textContent = message;
+      const box = $('choiceBtns');
+      box.replaceChildren();
+      for (const c of choices) {
+        const btn = el('button', { textContent: c.label, className: c.cls || '' });
+        btn.onclick = () => finish(c.label);
+        box.append(btn);
+      }
+      // Escape fires 'cancel' while the dialog is still open. A later 'close' event from an
+      // earlier dialog must not resolve this one, so only 'cancel' is handled here.
+      dlg.oncancel = () => finish(null);
+      dlg.showModal();
+    });
+  }
+
   async function newProject() {
     if (strokes.length || layers.length > 2) {
-      if (confirm('Save the current project before starting a new one?')) {
+      const choice = await askChoice('Start a new project? The current drawing will be lost unless you save it.', [
+        { label: 'Cancel' },
+        { label: 'Delete', cls: 'danger' },
+        { label: 'Save', cls: 'primary' }
+      ]);
+      if (choice === 'Save') {
+        // Opens the share sheet; if it is cancelled or fails, keep the drawing
         const saved = await saveProject();
-        if (!saved) return;   // saving was cancelled or failed: keep the drawing
-      } else if (!confirm('Discard the current drawing? This cannot be undone.')) {
-        return;
+        if (!saved) return;
+      } else if (choice === 'Delete') {
+        const sure = await askChoice('Delete this drawing? This cannot be undone.', [
+          { label: 'Cancel' },
+          { label: 'Delete', cls: 'danger' }
+        ]);
+        if (sure !== 'Delete') return;
+      } else {
+        return;   // Cancel, or dismissed
       }
     }
     // Nothing from the old project is kept: no undo, no redo, no internal clipboard
