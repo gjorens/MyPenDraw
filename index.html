@@ -67,14 +67,29 @@
   .drawer .sub { font-size: 13px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: .4px; margin: 14px 0 8px; }
   .drawer .hint { font-size: 13px; color: #444; margin-top: 10px; line-height: 1.4; }
   .grid-sw { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; justify-items: center; }
-  .swatch, input.custom {
+  .swatch, button.custom {
     width: 52px !important; height: 52px !important; min-width: 52px !important; border-radius: 50% !important;
     padding: 0; border: 2px solid #fff !important; box-shadow: 0 0 0 1.5px #5a5a5a; cursor: pointer;
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   }
-  input.custom { -webkit-appearance: none; appearance: none; background: none; }
-  input.custom::-webkit-color-swatch-wrapper { padding: 0; }
-  input.custom::-webkit-color-swatch { border: none; border-radius: 50%; }
-  .swatch.active, input.custom.active { box-shadow: 0 0 0 4px var(--accent) !important; }
+  .swatch.active, button.custom.active { box-shadow: 0 0 0 4px var(--accent) !important; }
+
+  /* Detached colour window: floats over the canvas and can be dragged anywhere */
+  .drawer.floating {
+    left: 0; top: 0; bottom: auto; width: 290px; max-height: 72vh; transform: none; transition: none;
+    border: 2px solid #8a8a8a; border-radius: 14px; box-shadow: 0 10px 28px rgba(0,0,0,0.3);
+  }
+  .drawer.floating h3 { cursor: move; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .h3-btns { display: flex; gap: 6px; align-items: center; }
+  .detach-btn {
+    height: 40px; padding: 0 10px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
+    font-size: 14px; font-weight: 600; color: #111; cursor: pointer;
+  }
+  .edit-preview { height: 48px; border-radius: 10px; border: 1.5px solid #7a7a7a; margin-bottom: 10px; }
+  .edit-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 15px; }
+  .edit-row span { width: 48px; font-weight: 600; }
+  .edit-row input { flex: 1; accent-color: var(--accent); }
+  .edit-hex { font-size: 15px; font-weight: 700; text-align: center; margin-bottom: 8px; }
   .opt-btn {
     width: 100%; height: 52px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
     display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px; font-size: 17px; font-weight: 600; color: #111; cursor: pointer; margin-bottom: 8px;
@@ -226,7 +241,7 @@
 
 <!-- Colour drawer -->
 <aside class="drawer" id="drawer-colors" aria-label="Colours">
-  <h3>Colour <button class="close" data-close aria-label="Close">✕</button></h3>
+  <h3 id="colorHead"><span>Colour</span><span class="h3-btns"><button class="detach-btn" id="colorDetach" title="Detach as a window">Detach</button><button class="close" data-close aria-label="Close">✕</button></span></h3>
   <div class="sub">Solid</div>
   <div class="grid-sw">
     <button class="swatch active" data-group="color" data-color="#111111" style="background:#111" title="Black"></button>
@@ -238,14 +253,23 @@
   </div>
   <div class="sub">Custom</div>
   <div class="grid-sw">
-    <input class="custom" data-group="color" data-idx="0" type="color" value="#ffffff" title="Custom colour 1">
-    <input class="custom" data-group="color" data-idx="1" type="color" value="#868e96" title="Custom colour 2">
-    <input class="custom" data-group="color" data-idx="2" type="color" value="#495057" title="Custom colour 3">
-    <input class="custom" data-group="color" data-idx="3" type="color" value="#ffd43b" title="Custom colour 4">
-    <input class="custom" data-group="color" data-idx="4" type="color" value="#69db7c" title="Custom colour 5">
-    <input class="custom" data-group="color" data-idx="5" type="color" value="#4dabf7" title="Custom colour 6">
+    <button class="swatch custom" data-group="color" data-idx="0" title="Custom colour 1"></button>
+    <button class="swatch custom" data-group="color" data-idx="1" title="Custom colour 2"></button>
+    <button class="swatch custom" data-group="color" data-idx="2" title="Custom colour 3"></button>
+    <button class="swatch custom" data-group="color" data-idx="3" title="Custom colour 4"></button>
+    <button class="swatch custom" data-group="color" data-idx="4" title="Custom colour 5"></button>
+    <button class="swatch custom" data-group="color" data-idx="5" title="Custom colour 6"></button>
   </div>
-  <p class="hint">Tap a custom colour to use it. Tap it again to change it with the colour picker.</p>
+  <div id="colorEditor" hidden>
+    <div class="sub">Edit custom colour <span id="editName"></span></div>
+    <div class="edit-preview" id="editPreview"></div>
+    <label class="edit-row"><span>Red</span><input type="range" id="edR" min="0" max="255"></label>
+    <label class="edit-row"><span>Green</span><input type="range" id="edG" min="0" max="255"></label>
+    <label class="edit-row"><span>Blue</span><input type="range" id="edB" min="0" max="255"></label>
+    <div class="edit-hex" id="editHex"></div>
+    <button class="opt-btn" id="editDone">Done</button>
+  </div>
+  <p class="hint">Tap a custom colour to use it. Hold it to change its colour.</p>
 </aside>
 
 <!-- Pen drawer -->
@@ -373,7 +397,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.18.4</div>
+<div id="version">v0.19.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -384,7 +408,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.18.4';
+  const APP_VERSION = '0.19.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -440,6 +464,11 @@
   let gesture = null;        // pinch state
   let rafId = 0, pendingFull = false;
   let openDrawer = null;     // 'colors' | 'pen' | 'shapes' | 'import' | 'text' | null
+  let colorFloating = false; // colour panel detached as a window over the canvas
+  let colorWindowShown = false;
+  let colorPos = { x: 150, y: 140 };  // top-left of the detached colour window, in CSS pixels
+  let colorDrag = null;
+  let editIdx = null;        // custom colour being edited (held down), or null
 
   // ---------- custom colours (saved on this device) ----------
   function loadCustom() {
@@ -2121,11 +2150,16 @@
 
   function syncDrawers() {
     document.querySelectorAll('.drawer').forEach(d => {
+      if (d.id === 'drawer-colors' && colorFloating) return;   // shown by colorWindowShown instead
       d.classList.toggle('open', d.id === 'drawer-' + openDrawer);
     });
     document.querySelectorAll('[data-drawer]').forEach(b => {
+      if (b.dataset.drawer === 'colors') return;
       b.classList.toggle('open', b.dataset.drawer === openDrawer);
     });
+    const colorOn = colorFloating ? colorWindowShown : openDrawer === 'colors';
+    $('drawer-colors').classList.toggle('open', colorOn);
+    $('colorBtn').classList.toggle('open', colorOn);
     if (openDrawer === 'text') syncTextDrawer();
     if (openDrawer === 'grid') syncGridDrawer();
     if (openDrawer === 'shapes') syncDimButtons();
@@ -2135,6 +2169,7 @@
     if (b.dataset.hold) return;   // Pen and Eraser are handled by holdToOpen below
     b.onclick = () => {
       const name = b.dataset.drawer;
+      if (name === 'colors' && colorFloating) { colorWindowShown = !colorWindowShown; syncDrawers(); return; }
       // Opening a drawer for a tool selects that tool
       if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
       if (name === 'shapes' && !SHAPES.includes(tool)) setTool('rect');
@@ -2171,8 +2206,63 @@
   });
 
   document.querySelectorAll('[data-close]').forEach(b => {
-    b.onclick = () => { openDrawer = null; syncDrawers(); };
+    b.onclick = () => {
+      if (colorFloating && b.closest('#drawer-colors')) colorWindowShown = false;
+      else openDrawer = null;
+      syncDrawers();
+    };
   });
+
+  // ---------- detachable colour window ----------
+  function clampColorWindow() {
+    const d = $('drawer-colors');
+    const maxX = Math.max(0, window.innerWidth - d.offsetWidth);
+    const maxY = Math.max(0, window.innerHeight - d.offsetHeight);
+    colorPos.x = Math.min(maxX, Math.max(0, colorPos.x));
+    colorPos.y = Math.min(maxY, Math.max(0, colorPos.y));
+  }
+
+  function setColorFloating(on) {
+    colorFloating = on;
+    const d = $('drawer-colors');
+    d.classList.toggle('floating', on);
+    if (on) {
+      colorWindowShown = true;
+      if (openDrawer === 'colors') openDrawer = null;
+      clampColorWindow();
+      d.style.left = colorPos.x + 'px';
+      d.style.top = colorPos.y + 'px';
+    } else {
+      d.style.left = '';
+      d.style.top = '';
+      openDrawer = 'colors';   // dock back into the side drawer
+    }
+    $('colorDetach').textContent = on ? 'Dock' : 'Detach';
+    $('colorDetach').title = on ? 'Dock back to the side' : 'Detach as a window';
+    syncDrawers();
+  }
+  $('colorDetach').onclick = () => setColorFloating(!colorFloating);
+
+  // Drag the detached window by its title bar
+  const colorHead = $('colorHead');
+  colorHead.addEventListener('pointerdown', e => {
+    if (!colorFloating || e.target.closest('button')) return;
+    colorDrag = { dx: e.clientX - colorPos.x, dy: e.clientY - colorPos.y, id: e.pointerId };
+    colorHead.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  colorHead.addEventListener('pointermove', e => {
+    if (!colorDrag || e.pointerId !== colorDrag.id) return;
+    colorPos.x = e.clientX - colorDrag.dx;
+    colorPos.y = e.clientY - colorDrag.dy;
+    clampColorWindow();
+    const d = $('drawer-colors');
+    d.style.left = colorPos.x + 'px';
+    d.style.top = colorPos.y + 'px';
+  });
+  const endColorDrag = () => { colorDrag = null; };
+  colorHead.addEventListener('pointerup', endColorDrag);
+  colorHead.addEventListener('pointercancel', endColorDrag);
 
   // Picking any colour switches away from the eraser and select tools, since neither uses colour
   function pickColor(c, el) {
@@ -2188,22 +2278,58 @@
   }
 
   // Six fixed colours
-  document.querySelectorAll('button.swatch').forEach(btn => {
+  document.querySelectorAll('button.swatch:not(.custom)').forEach(btn => {
     btn.onclick = () => { pickColor(btn.dataset.color, btn); endTextEdit(); };
   });
 
-  // Six custom colours: tap to use, then edit in the native RGB picker
-  const customInputs = [...document.querySelectorAll('input.custom')];
-  customInputs.forEach((inp, i) => {
-    inp.value = customColors[i];
-    inp.addEventListener('click', () => pickColor(inp.value, inp));
-    inp.addEventListener('change', endTextEdit);
-    inp.addEventListener('input', () => {
-      customColors[i] = inp.value;
-      saveCustom(customColors);
-      pickColor(inp.value, inp);
+  // Six custom colours: a quick tap uses the colour; holding for about half a second opens the editor
+  const customBtns = [...document.querySelectorAll('button.custom')];
+  customBtns.forEach((btn, i) => {
+    btn.style.background = customColors[i];
+    let timer = 0, held = false;
+    btn.addEventListener('pointerdown', () => {
+      held = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => { held = true; openColorEditor(i); }, HOLD_MS);
     });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => btn.addEventListener(t, () => clearTimeout(timer)));
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+    btn.onclick = () => {
+      if (held) { held = false; return; }   // the hold already opened the editor
+      pickColor(customColors[i], btn);
+      endTextEdit();
+    };
   });
+
+  function openColorEditor(i) {
+    editIdx = i;
+    pickColor(customColors[i], customBtns[i]);
+    $('editName').textContent = i + 1;
+    $('colorEditor').hidden = false;
+    syncColorEditor();
+  }
+  function syncColorEditor() {
+    const hex = customColors[editIdx];
+    $('edR').value = parseInt(hex.slice(1, 3), 16);
+    $('edG').value = parseInt(hex.slice(3, 5), 16);
+    $('edB').value = parseInt(hex.slice(5, 7), 16);
+    $('editPreview').style.background = hex;
+    $('editHex').textContent = hex.toUpperCase();
+  }
+  for (const id of ['edR', 'edG', 'edB']) {
+    $(id).addEventListener('input', () => {
+      if (editIdx === null) return;
+      const hex = '#' + ['edR', 'edG', 'edB'].map(k => Number($(k).value).toString(16).padStart(2, '0')).join('');
+      customColors[editIdx] = hex;
+      saveCustom(customColors);
+      customBtns[editIdx].style.background = hex;
+      pickColor(hex, customBtns[editIdx]);
+      $('editPreview').style.background = hex;
+      $('editHex').textContent = hex.toUpperCase();
+    });
+    $(id).addEventListener('change', endTextEdit);
+  }
+  $('editDone').onclick = () => { editIdx = null; $('colorEditor').hidden = true; };
 
   // Pen drawer: curve or straight line
   $('curveBtn').onclick = e => { mode = 'curve'; setGroup('mode', e.currentTarget); };
