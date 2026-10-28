@@ -10,7 +10,7 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <meta name="apple-mobile-web-app-title" content="Pen Draw">
 <style>
-  :root { --bar-h: 60px; --accent: #2f5fd6; }
+  :root { --bar-h: 60px; --accent: #1a3d9c; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f4f1; font-family: -apple-system, system-ui, sans-serif; color: #111; }
 
@@ -20,23 +20,49 @@
     background: #ffffff; border-bottom: 2px solid #b8b8b8;
     overflow-x: auto; z-index: 10;
   }
-  #toolbar button {
+  #toolbar button, #gridSpacing {
     min-width: 42px; height: 42px; border-radius: 10px; border: 1.5px solid #8a8a8a;
     background: #ffffff; color: #111; font-size: 17px; cursor: pointer; flex-shrink: 0;
   }
   #toolbar button.active { background: #dbe7ff; border-color: var(--accent); outline: 3px solid var(--accent); outline-offset: 1px; }
   #toolbar button:disabled { opacity: 0.35; }
   #toolbar button.text-btn { font-size: 15px; font-weight: 600; padding: 0 10px; }
-  .swatch { width: 30px !important; min-width: 30px !important; height: 30px !important; border-radius: 50% !important; padding: 0; border: 2px solid #fff !important; box-shadow: 0 0 0 1.5px #8a8a8a; }
+  #gridSpacing { font-size: 15px; font-weight: 600; padding: 0 6px; }
+
+  .swatch { width: 30px !important; min-width: 30px !important; height: 30px !important; border-radius: 50% !important; padding: 0; border: 2px solid #fff !important; box-shadow: 0 0 0 1.5px #5a5a5a; }
   .swatch.active { box-shadow: 0 0 0 3px var(--accent); }
-  #colorPick { width: 42px; height: 42px; padding: 3px; border: 1.5px solid #8a8a8a; border-radius: 10px; background: #fff; flex-shrink: 0; cursor: pointer; }
+  input.custom { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1.5px #5a5a5a; padding: 0; cursor: pointer; background: none; flex-shrink: 0; }
+  input.custom::-webkit-color-swatch-wrapper { padding: 0; }
+  input.custom::-webkit-color-swatch { border: none; border-radius: 50%; }
+  input.custom.active { box-shadow: 0 0 0 3px var(--accent); }
   .sep { width: 2px; height: 30px; background: #b0b0b0; flex-shrink: 0; }
-  #size { width: 150px; height: 30px; flex-shrink: 0; accent-color: var(--accent); }
+
+  /* Slider: dark track and thumb so it reads clearly */
+  #size { -webkit-appearance: none; appearance: none; width: 150px; height: 30px; flex-shrink: 0; background: transparent; margin: 0; }
+  #size::-webkit-slider-runnable-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
+  #size::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
+  #size::-moz-range-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
+  #size::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
   #size:disabled { opacity: 0.35; }
   #sizeLabel { font-size: 16px; font-weight: 700; color: #111; min-width: 30px; text-align: center; flex-shrink: 0; }
 
   #stage { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
+
+  #layerPanel {
+    position: fixed; top: calc(var(--bar-h) + 8px); right: 10px; width: 310px; max-height: 65vh; overflow-y: auto;
+    background: #ffffff; border: 2px solid #8a8a8a; border-radius: 14px; padding: 10px; z-index: 15;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+  }
+  #layerPanel[hidden] { display: none; }
+  .lp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 16px; }
+  .lp-actions button { min-width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid #8a8a8a; background: #fff; font-size: 17px; margin-left: 4px; }
+  .layer-row { display: flex; align-items: center; gap: 6px; padding: 6px; border: 1.5px solid #aaa; border-radius: 10px; margin-bottom: 6px; background: #fff; cursor: pointer; }
+  .layer-row.active { border-color: var(--accent); background: #e4ecff; box-shadow: inset 0 0 0 1px var(--accent); }
+  .layer-row button { min-width: 32px; height: 32px; border-radius: 8px; border: 1.5px solid #8a8a8a; background: #fff; font-size: 15px; flex-shrink: 0; }
+  .layer-row button:disabled { opacity: 0.35; }
+  .layer-row .lname { flex: 1; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layer-row input[type=range] { width: 70px; flex-shrink: 0; accent-color: var(--accent); }
 
   #version {
     position: fixed; right: 10px; bottom: 8px; z-index: 10;
@@ -62,13 +88,19 @@
   <button id="arcBtn" data-group="tool" title="Arc: drag from one end to the other">◠</button>
   <button id="fillBtn" class="text-btn" data-group="tool" title="Fill area">Fill</button>
   <div class="sep"></div>
-  <input id="colorPick" type="color" value="#111111" title="Pick any color">
   <button class="swatch active" data-group="color" data-color="#111111" style="background:#111" title="Black"></button>
   <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131" title="Red"></button>
   <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6" title="Blue"></button>
   <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
   <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
   <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
+  <div class="sep"></div>
+  <input class="custom" data-group="color" data-idx="0" type="color" value="#ffffff" title="Custom colour 1">
+  <input class="custom" data-group="color" data-idx="1" type="color" value="#868e96" title="Custom colour 2">
+  <input class="custom" data-group="color" data-idx="2" type="color" value="#495057" title="Custom colour 3">
+  <input class="custom" data-group="color" data-idx="3" type="color" value="#ffd43b" title="Custom colour 4">
+  <input class="custom" data-group="color" data-idx="4" type="color" value="#69db7c" title="Custom colour 5">
+  <input class="custom" data-group="color" data-idx="5" type="color" value="#4dabf7" title="Custom colour 6">
   <div class="sep"></div>
   <input id="size" type="range" min="1" max="30" value="4" title="Brush, eraser, or outline width">
   <span id="sizeLabel">4</span>
@@ -78,7 +110,14 @@
   <button id="lineBtn" class="text-btn" data-group="mode" title="Straight lines">Line</button>
   <button id="gridBtn" title="Show grid">▦</button>
   <button id="snapBtn" title="Snap to grid">⊞</button>
-  <button id="resetViewBtn" class="text-btn" title="Reset zoom">1:1</button>
+  <select id="gridSpacing" title="Grid spacing">
+    <option value="10">10</option>
+    <option value="20">20</option>
+    <option value="40" selected>40</option>
+    <option value="80">80</option>
+  </select>
+  <button id="resetViewBtn" title="Reset zoom">⤢</button>
+  <button id="layersBtn" title="Layers">▤</button>
   <div class="sep"></div>
   <button id="undoBtn" title="Undo" disabled>↶</button>
   <button id="redoBtn" title="Redo" disabled>↷</button>
@@ -93,41 +132,53 @@
   </button>
 </div>
 
+<div id="layerPanel" hidden>
+  <div class="lp-head">
+    <strong>Layers</strong>
+    <span class="lp-actions">
+      <button id="addLayer" title="Add layer">＋</button>
+      <button id="delLayer" title="Delete layer">−</button>
+      <button id="closeLayers" title="Close">✕</button>
+    </span>
+  </div>
+  <div id="layerList"></div>
+</div>
+
 <div id="stage">
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.5.0</div>
+<div id="version">v0.6.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.5.0';
+  const APP_VERSION = '0.6.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
   const canvas = $('c');
   const ctx = canvas.getContext('2d');
-  // Committed items are drawn here, without the grid, so the eraser only cuts ink
-  // and the grid never gets painted over.
-  const ink = document.createElement('canvas');
-  const ictx = ink.getContext('2d');
-
-  const GRID = 40;                       // grid spacing and snap step, in drawing units
-  const MIN_SCALE = 0.5, MAX_SCALE = 6;
   const SHAPES = ['rect', 'oval', 'arc'];
+  const MIN_SCALE = 0.5, MAX_SCALE = 6;
   const HISTORY_LIMIT = 200;
+  const CUSTOM_KEY = 'pendraw-custom-colors';
   const dpr = () => window.devicePixelRatio || 1;
 
   // ---------- state ----------
-  // Items, in drawing order. Each is one of:
-  //   freehand/line: {color, size, eraser, straight, pointerType, points:[{x,y,p}]}
-  //   shape:         {shape:'rect'|'oval'|'arc', color, size, filled, points:[a,b]}
-  //   fill:          {fill:true, color, x, y}  (not selectable)
-  // Items are never edited in place; changes create new objects. That lets
-  // history be a simple list of previous item arrays.
+  // Items, in drawing order. Each carries the id of the layer it belongs to:
+  //   freehand/line: {layer, color, size, eraser, straight, pointerType, points:[{x,y,p}]}
+  //   shape:         {layer, shape:'rect'|'oval'|'arc', color, size, filled, side, points:[a,b]}
+  //   fill:          {layer, fill:true, color, x, y}   (not selectable)
+  // Items and layers are never edited in place; changes create new objects. That
+  // makes history a list of earlier snapshots.
   let strokes = [];
+  let layers = [{ id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }];  // bottom to top
+  let activeLayer = 'L1';
+  let layerSeq = 1;
+  const layerCanvases = new Map();    // layer id -> offscreen canvas holding that layer's ink
+
   let undoStack = [], redoStack = [];
   let current = null;        // item being drawn
   let preview = null;        // line or shape being dragged out (not yet committed)
@@ -141,6 +192,7 @@
   let shapeFilled = false;
   let showGrid = false;
   let snap = false;
+  let GRID = 40;             // grid spacing and snap step, in drawing units
   let penInUse = false;      // once the Pencil is used, finger touches are ignored for drawing
   let activePointerId = null;
   let view = { scale: 1, ox: 0, oy: 0 };  // zoom and pan, in CSS pixels
@@ -148,12 +200,42 @@
   let gesture = null;        // pinch state
   let rafId = 0, pendingFull = false;
 
+  // ---------- custom colours (saved on this device) ----------
+  function loadCustom() {
+    try {
+      const a = JSON.parse(localStorage.getItem(CUSTOM_KEY));
+      if (Array.isArray(a) && a.length === 6) return a;
+    } catch (e) {}
+    return ['#ffffff', '#868e96', '#495057', '#ffd43b', '#69db7c', '#4dabf7'];
+  }
+  function saveCustom(list) {
+    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+  let customColors = loadCustom();
+
+  // ---------- layers: canvases ----------
+  function layerCanvas(id) {
+    let lc = layerCanvases.get(id);
+    if (!lc) {
+      lc = document.createElement('canvas');
+      lc.width = canvas.width;
+      lc.height = canvas.height;
+      layerCanvases.set(id, lc);
+    }
+    return lc;
+  }
+  const layerCtx = id => layerCanvas(id).getContext('2d');
+
   // ---------- sizing ----------
   function resize() {
     const rect = canvas.getBoundingClientRect();
     const d = dpr();
-    canvas.width = ink.width = Math.round(rect.width * d);
-    canvas.height = ink.height = Math.round(rect.height * d);
+    canvas.width = Math.round(rect.width * d);
+    canvas.height = Math.round(rect.height * d);
+    for (const lc of layerCanvases.values()) {
+      lc.width = canvas.width;
+      lc.height = canvas.height;
+    }
     redrawInk();
   }
   window.addEventListener('resize', resize);
@@ -216,17 +298,24 @@
     c.restore();
   }
 
-  // Rectangle, oval, or arc. The arc is a half circle that runs from the pen-down
-  // point to the pen-up point; the side it bulges to follows the drag direction.
+  // Rectangle, oval, or arc. The arc is a half circle from the pen-down point to
+  // the pen-up point. It bulges toward the side the pen first moved toward (s.side).
   function shapePath(c, s, closed) {
     const [a, b] = s.points;
     c.beginPath();
     if (s.shape === 'arc') {
-      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-      const r = Math.hypot(b.x - a.x, b.y - a.y) / 2;
-      const th = Math.atan2(a.y - cy, a.x - cx);
-      c.arc(cx, cy, r, th, th + Math.PI, false);
-      if (closed) c.closePath();   // closing chord from b back to a
+      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+      if (len > 0) {
+        const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, r = len / 2;
+        const side = s.side || 1;
+        const thA = Math.atan2(a.y - cy, a.x - cx);
+        const thN = Math.atan2(dx * side, -dy * side);   // direction of the bulge
+        let diff = thN - thA;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        if (diff > 0) c.arc(cx, cy, r, thA, thA + Math.PI, false);
+        else c.arc(cx, cy, r, thA, thA - Math.PI, true);
+      }
+      if (closed) c.closePath();   // closing chord back to the start point
       return;
     }
     const bx = box(a, b);
@@ -249,7 +338,7 @@
   }
 
   function drawStroke(c, stroke) {
-    if (stroke.fill) return;                 // fills are applied to ink in redrawInk
+    if (stroke.fill) return;                 // fills are applied to layer ink in redrawInk
     if (stroke.shape) { drawShape(c, stroke); return; }
     const pts = stroke.points;
     if (stroke.straight && pts.length >= 2) {
@@ -275,16 +364,16 @@
     for (let i = 1; i < pts.length; i++) drawSegment(c, stroke, pts, i);
   }
 
-  // Paint-bucket fill on the ink layer: fills the connected area matching the
+  // Paint-bucket fill on one layer's ink: fills the connected area matching the
   // colour under the seed point (usually transparent space).
-  function floodFill(f) {
-    const W = ink.width, H = ink.height;
+  function floodFill(f, c) {
+    const W = c.canvas.width, H = c.canvas.height;
     const d = dpr(), k = view.scale;
     const sx = Math.round((f.x * k + view.ox) * d);
     const sy = Math.round((f.y * k + view.oy) * d);
     if (sx < 0 || sy < 0 || sx >= W || sy >= H) return;
 
-    const img = ictx.getImageData(0, 0, W, H);
+    const img = c.getImageData(0, 0, W, H);
     const data = img.data;
     const seed = (sy * W + sx) * 4;
     const tr = data[seed], tg = data[seed + 1], tb = data[seed + 2], ta = data[seed + 3];
@@ -322,7 +411,7 @@
         }
       }
     }
-    ictx.putImageData(img, 0, 0);
+    c.putImageData(img, 0, 0);
   }
 
   function drawGrid() {
@@ -345,7 +434,7 @@
     const pad = (selected.size || 0) / 2 + 3 / s;
     const h = 7 / s;
     c.save();
-    c.strokeStyle = '#2f5fd6';
+    c.strokeStyle = '#1a3d9c';
     c.lineWidth = 1.5 / s;
     c.setLineDash([6 / s, 4 / s]);
     c.strokeRect(b.x0 - pad, b.y0 - pad, (b.x1 - b.x0) + 2 * pad, (b.y1 - b.y0) + 2 * pad);
@@ -361,33 +450,48 @@
     c.restore();
   }
 
-  // Rebuild the committed ink from scratch (needed after zoom, pan, undo, or resize)
+  // Rebuild every layer's ink from the item list (needed after zoom, pan, undo, or resize)
   function redrawInk() {
-    ictx.setTransform(1, 0, 0, 1, 0, 0);
-    ictx.clearRect(0, 0, ink.width, ink.height);
-    for (const s of strokes) {
-      if (s.fill) {
-        ictx.setTransform(1, 0, 0, 1, 0, 0);
-        floodFill(s);
-      } else {
-        setTransform(ictx);
-        drawStroke(ictx, s);
-      }
+    for (const id of [...layerCanvases.keys()]) {
+      if (!layers.some(l => l.id === id)) layerCanvases.delete(id);
     }
-    ictx.setTransform(1, 0, 0, 1, 0, 0);
+    for (const l of layers) {
+      const lc = layerCanvas(l.id);
+      const lctx = lc.getContext('2d');
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
+      lctx.clearRect(0, 0, lc.width, lc.height);
+      for (const s of strokes) {
+        if (s.layer !== l.id) continue;
+        if (s.fill) {
+          lctx.setTransform(1, 0, 0, 1, 0, 0);
+          floodFill(s, lctx);
+        } else {
+          setTransform(lctx);
+          drawStroke(lctx, s);
+        }
+      }
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
     render();
     updateButtons();
   }
 
-  // Composite: white paper, optional grid, ink, preview, then selection
+  // Composite: white paper, optional grid, visible layers bottom to top with their
+  // opacity, then the preview, then the selection outline
   function render() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (showGrid) drawGrid();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(ink, 0, 0);
+    for (const l of layers) {
+      if (!l.visible) continue;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = l.opacity;
+      ctx.drawImage(layerCanvas(l.id), 0, 0);
+    }
+    ctx.globalAlpha = 1;
     if (preview) {
       setTransform(ctx);
       // Eraser preview shows as a grey guide line; the real erase happens on release
@@ -433,12 +537,14 @@
     return false;
   }
 
-  // Topmost item under the point; fills are skipped because their area is not an object
+  // Topmost visible item under the point; fills are skipped because their area is not an object
   function hitItem(pt) {
     const tol = 12 / view.scale;
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
       if (s.fill) continue;
+      const L = layers.find(l => l.id === s.layer);
+      if (!L || !L.visible) continue;
       if (s.shape) {
         const b = rawBox(s), pad = (s.size || 0) / 2 + tol;
         if (pt.x >= b.x0 - pad && pt.x <= b.x1 + pad && pt.y >= b.y0 - pad && pt.y <= b.y1 + pad) return s;
@@ -466,8 +572,8 @@
   function startDrag(kind, item, pt, anchor) {
     drag = {
       kind,
-      ref: item,              // the original object, as it appears in `before`
-      before: strokes,
+      ref: item,              // the original object, as it appears in the snapshot
+      before: snapshot(),
       start: pt,
       anchor,
       orig: item.points.map(p => ({ ...p })),
@@ -494,13 +600,13 @@
       fn = p => ({ x: nb.x0 + (p.x - b.x0) * sx, y: nb.y0 + (p.y - b.y0) * sy });
     }
     const item = { ...d.ref, points: d.orig.map(p => ({ ...fn(p), p: p.p })) };
-    strokes = d.before.map(s => (s === d.ref ? item : s));
+    strokes = d.before.items.map(s => (s === d.ref ? item : s));
     selected = item;
     scheduleRender(true);
   }
 
   function finishDrag() {
-    if (strokes !== drag.before) pushHistory(drag.before);
+    if (strokes !== drag.before.items) pushHistory(drag.before);
     drag = null;
     activePointerId = null;
     scheduleRender(true);
@@ -508,7 +614,7 @@
   }
 
   function cancelDrag() {
-    strokes = drag.before;
+    strokes = drag.before.items;
     drag = null;
     activePointerId = null;
     scheduleRender(true);
@@ -574,18 +680,23 @@
         startDrag('resize', selected, raw, corner.anchor);
       } else {
         selected = hitItem(raw);
-        if (selected) startDrag('move', selected, raw, null);
-        else activePointerId = null;
+        if (selected) {
+          activeLayer = selected.layer;
+          startDrag('move', selected, raw, null);
+        } else {
+          activePointerId = null;
+        }
       }
+      renderLayerList();
       scheduleRender(false);
       updateButtons();
       return;
     }
 
-    // Fill: one tap paints the area under it
+    // Fill: one tap paints the area under it, on the active layer
     if (tool === 'fill') {
-      pushHistory(strokes);
-      strokes = [...strokes, { fill: true, color, x: raw.x, y: raw.y }];
+      pushHistory(snapshot());
+      strokes = [...strokes, { layer: activeLayer, fill: true, color, x: raw.x, y: raw.y }];
       redrawInk();
       return;
     }
@@ -595,6 +706,7 @@
 
     const pt = dragging && snap ? snapPt(raw) : raw;
     current = {
+      layer: activeLayer,
       color,
       size: tool === 'eraser' ? eraserSize : penSize,
       eraser: tool === 'eraser',
@@ -607,8 +719,9 @@
     if (current.straight || current.shape) {
       preview = current;
     } else {
-      setTransform(ictx);
-      drawStroke(ictx, current);   // a tap shows as a dot
+      const lctx = layerCtx(current.layer);
+      setTransform(lctx);
+      drawStroke(lctx, current);   // a tap shows as a dot
     }
     scheduleRender(false);
   });
@@ -629,14 +742,25 @@
 
     const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
     const dragging = current.straight || current.shape;
-    setTransform(ictx);
+    const lctx = layerCtx(current.layer);
+    setTransform(lctx);
     for (const ev of events) {
       const pt = toWorld(ev);
       if (dragging) {
+        // Arc side: remember the first point the pen moved to, away from the start
+        if (current.shape === 'arc' && !current.anchorPt &&
+            Math.hypot(pt.x - current.points[0].x, pt.y - current.points[0].y) > 4 / view.scale) {
+          current.anchorPt = pt;
+        }
         current.points[1] = snap ? snapPt(pt) : pt;
+        if (current.anchorPt) {
+          const [a, b] = current.points;
+          const cross = (b.x - a.x) * (current.anchorPt.y - a.y) - (b.y - a.y) * (current.anchorPt.x - a.x);
+          current.side = Math.sign(cross) || 1;
+        }
       } else {
         current.points.push(pt);
-        drawSegment(ictx, current, current.points, current.points.length - 1);
+        drawSegment(lctx, current, current.points, current.points.length - 1);
       }
     }
     if (dragging) preview = current;
@@ -653,7 +777,7 @@
       return;
     }
     if (!current || e.pointerId !== activePointerId) return;
-    pushHistory(strokes);
+    pushHistory(snapshot());
     strokes = [...strokes, current];
     current = null;
     activePointerId = null;
@@ -664,9 +788,22 @@
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
 
-  // ---------- history: undo, redo, delete, clear ----------
-  // Each history entry is the whole item list before a change. Items are never
-  // mutated, so storing the list is enough.
+  // ---------- history ----------
+  // A snapshot is the item list plus the layer list. Both are immutable, so keeping
+  // references is enough. Layer visibility and opacity are also saved with snapshots.
+  function snapshot() {
+    return { items: strokes, layers };
+  }
+
+  function restore(s) {
+    strokes = s.items;
+    layers = s.layers;
+    if (!strokes.includes(selected)) selected = null;
+    if (!layers.some(l => l.id === activeLayer)) activeLayer = layers[layers.length - 1].id;
+    renderLayerList();
+    redrawInk();
+  }
+
   function pushHistory(before) {
     undoStack.push(before);
     if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
@@ -675,23 +812,19 @@
 
   function undo() {
     if (!undoStack.length) return;
-    redoStack.push(strokes);
-    strokes = undoStack.pop();
-    if (!strokes.includes(selected)) selected = null;
-    redrawInk();
+    redoStack.push(snapshot());
+    restore(undoStack.pop());
   }
 
   function redo() {
     if (!redoStack.length) return;
-    undoStack.push(strokes);
-    strokes = redoStack.pop();
-    if (!strokes.includes(selected)) selected = null;
-    redrawInk();
+    undoStack.push(snapshot());
+    restore(redoStack.pop());
   }
 
   function deleteSelected() {
     if (!selected) return;
-    pushHistory(strokes);
+    pushHistory(snapshot());
     strokes = strokes.filter(s => s !== selected);
     selected = null;
     redrawInk();
@@ -699,7 +832,7 @@
 
   function clearAll() {
     if (!strokes.length) return;
-    pushHistory(strokes);
+    pushHistory(snapshot());
     strokes = [];
     selected = null;
     redrawInk();
@@ -711,16 +844,109 @@
     $('delBtn').disabled = !selected;
   }
 
+  // ---------- layers ----------
+  function el(tag, props, ...children) {
+    const n = document.createElement(tag);
+    Object.assign(n, props || {});
+    for (const c of children) n.append(c);
+    return n;
+  }
+
+  // Changes layer properties without touching items. Visibility, opacity, and order
+  // only need a re-composite, so they are not added to undo history.
+  function updateLayer(id, patch, rebuild) {
+    layers = layers.map(l => (l.id === id ? { ...l, ...patch } : l));
+    if (rebuild) renderLayerList();
+    scheduleRender(false);
+  }
+
+  function moveLayer(id, dir) {
+    const idx = layers.findIndex(l => l.id === id);
+    const j = idx + dir;
+    if (idx < 0 || j < 0 || j >= layers.length) return;
+    const arr = layers.slice();
+    [arr[idx], arr[j]] = [arr[j], arr[idx]];
+    layers = arr;
+    renderLayerList();
+    scheduleRender(false);
+  }
+
+  // Lists layers top first, like a stack of paper
+  function renderLayerList() {
+    const list = $('layerList');
+    list.replaceChildren();
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const l = layers[i];
+      const eye = el('button', { textContent: l.visible ? '👁' : '⊘', title: l.visible ? 'Hide layer' : 'Show layer' });
+      eye.onclick = e => { e.stopPropagation(); updateLayer(l.id, { visible: !l.visible }, true); };
+
+      const name = el('span', { className: 'lname', textContent: l.name, title: 'Tap to select, double-tap to rename' });
+      name.ondblclick = () => {
+        const n = prompt('Layer name', l.name);
+        if (n && n.trim()) updateLayer(l.id, { name: n.trim().slice(0, 30) }, true);
+      };
+
+      const op = el('input', { type: 'range', min: 0, max: 100, value: Math.round(l.opacity * 100), title: 'Opacity' });
+      op.oninput = () => updateLayer(l.id, { opacity: Number(op.value) / 100 }, false);
+      op.onclick = e => e.stopPropagation();
+
+      const up = el('button', { textContent: '↑', title: 'Move up', disabled: i === layers.length - 1 });
+      up.onclick = e => { e.stopPropagation(); moveLayer(l.id, 1); };
+      const down = el('button', { textContent: '↓', title: 'Move down', disabled: i === 0 });
+      down.onclick = e => { e.stopPropagation(); moveLayer(l.id, -1); };
+
+      const row = el('div', { className: 'layer-row' + (l.id === activeLayer ? ' active' : '') }, eye, name, op, up, down);
+      row.onclick = () => { activeLayer = l.id; renderLayerList(); };
+      list.append(row);
+    }
+  }
+
+  $('layersBtn').onclick = () => {
+    const p = $('layerPanel');
+    p.hidden = !p.hidden;
+    if (!p.hidden) renderLayerList();
+  };
+  $('closeLayers').onclick = () => { $('layerPanel').hidden = true; };
+
+  $('addLayer').onclick = () => {
+    pushHistory(snapshot());
+    const id = 'L' + (++layerSeq);
+    const idx = layers.findIndex(l => l.id === activeLayer);
+    layers = [...layers.slice(0, idx + 1), { id, name: 'Layer ' + layerSeq, visible: true, opacity: 1 }, ...layers.slice(idx + 1)];
+    activeLayer = id;
+    renderLayerList();
+    scheduleRender(false);
+    updateButtons();
+  };
+
+  $('delLayer').onclick = () => {
+    if (layers.length <= 1) { showToast('Keep at least one layer'); return; }
+    const idx = layers.findIndex(l => l.id === activeLayer);
+    pushHistory(snapshot());
+    const id = activeLayer;
+    strokes = strokes.filter(s => s.layer !== id);
+    layers = layers.filter(l => l.id !== id);
+    activeLayer = layers[Math.min(idx, layers.length - 1)].id;
+    if (!strokes.includes(selected)) selected = null;
+    renderLayerList();
+    redrawInk();
+  };
+
   // ---------- export ----------
-  // Exports the ink on white, without the grid, selection, or preview
+  // Exports visible layers on white, without the grid, selection, or preview
   function exportCanvas() {
     const c = document.createElement('canvas');
-    c.width = ink.width;
-    c.height = ink.height;
+    c.width = canvas.width;
+    c.height = canvas.height;
     const cx = c.getContext('2d');
     cx.fillStyle = '#ffffff';
     cx.fillRect(0, 0, c.width, c.height);
-    cx.drawImage(ink, 0, 0);
+    for (const l of layers) {
+      if (!l.visible) continue;
+      cx.globalAlpha = l.opacity;
+      cx.drawImage(layerCanvas(l.id), 0, 0);
+    }
+    cx.globalAlpha = 1;
     return c;
   }
 
@@ -800,21 +1026,28 @@
   $('arcBtn').onclick = e => setTool('arc', e.currentTarget);
   $('fillBtn').onclick = e => setTool('fill', e.currentTarget);
 
-  const colorPick = $('colorPick');
-  // Picking any colour switches to a drawing tool, since the eraser ignores colour
-  colorPick.addEventListener('input', () => {
-    color = colorPick.value;
+  // Picking any colour switches away from the eraser and select tools, since neither uses colour
+  function pickColor(c, el) {
+    color = c;
     if (tool === 'eraser' || tool === 'select') setTool('pen', $('penBtn'));
-    setGroup('color', null);
+    setGroup('color', el);
+  }
+
+  // Six fixed colours
+  document.querySelectorAll('button.swatch').forEach(btn => {
+    btn.onclick = () => pickColor(btn.dataset.color, btn);
   });
 
-  document.querySelectorAll('.swatch').forEach(btn => {
-    btn.onclick = () => {
-      color = btn.dataset.color;
-      colorPick.value = color;
-      if (tool === 'eraser' || tool === 'select') setTool('pen', $('penBtn'));
-      setGroup('color', btn);
-    };
+  // Six custom colours: tap to use, then edit in the native RGB picker
+  const customInputs = [...document.querySelectorAll('input.custom')];
+  customInputs.forEach((inp, i) => {
+    inp.value = customColors[i];
+    inp.addEventListener('click', () => pickColor(inp.value, inp));
+    inp.addEventListener('input', () => {
+      customColors[i] = inp.value;
+      saveCustom(customColors);
+      pickColor(inp.value, inp);
+    });
   });
 
   $('solidBtn').onclick = e => {
@@ -836,6 +1069,11 @@
     e.currentTarget.classList.toggle('active', snap);
   };
 
+  $('gridSpacing').onchange = e => {
+    GRID = Number(e.target.value);
+    scheduleRender(false);
+  };
+
   $('resetViewBtn').onclick = () => {
     view = { scale: 1, ox: 0, oy: 0 };
     scheduleRender(true);
@@ -845,7 +1083,7 @@
   $('redoBtn').onclick = redo;
   $('delBtn').onclick = deleteSelected;
   $('clearBtn').onclick = () => {
-    if (confirm('Clear the whole drawing? You can still undo.')) clearAll();
+    if (confirm('Clear all layers? You can still undo.')) clearAll();
   };
   $('saveBtn').onclick = savePNG;
   $('copyBtn').onclick = copyDrawing;
@@ -864,6 +1102,7 @@
 
   resize();
   syncSlider();
+  renderLayerList();
   updateButtons();
 })();
 </script>
