@@ -303,6 +303,7 @@
   <button class="opt-btn tool-btn" data-tool="rect" id="rectBtn">▭ Rectangle</button>
   <button class="opt-btn tool-btn" data-tool="oval" id="ovalBtn">○ Oval</button>
   <button class="opt-btn tool-btn" data-tool="arc" id="arcBtn">◠ Arc</button>
+  <button class="opt-btn tool-btn" data-tool="tri" id="triBtn">△ Triangle</button>
   <div class="sub">Fill</div>
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
   <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
@@ -424,7 +425,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.24.1</div>
+<div id="version">v0.25.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -441,14 +442,14 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.24.1';
+  const APP_VERSION = '0.25.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
   const canvas = $('c');
   const ctx = canvas.getContext('2d');
-  const SHAPES = ['rect', 'oval', 'arc'];
-  const SHAPE_ICONS = { rect: '▭', oval: '○', arc: '◠' };
+  const SHAPES = ['rect', 'oval', 'arc', 'tri'];
+  const SHAPE_ICONS = { rect: '▭', oval: '○', arc: '◠', tri: '△' };
   const MIN_SCALE = 0.5, MAX_SCALE = 6;
   const HISTORY_LIMIT = 15;   // undo steps kept; older steps are dropped
   const CUSTOM_KEY = 'pendraw-custom-colors';
@@ -588,7 +589,7 @@
 
   // Frame items are pictures, rectangles, ovals, text and arcs. They rotate about their centre.
   // For a rectangle or oval the centre is the midpoint of its two defining points.
-  const isFrame = s => !!s.image || s.kind === 'text' || s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc';
+  const isFrame = s => !!s.image || s.kind === 'text' || s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc' || s.shape === 'tri';
   function frameOf(s) {
     if (s.image) return s;
     if (s.shape === 'arc') return arcFrame(s);
@@ -697,6 +698,15 @@
       if (closed) c.closePath();   // closing chord back to the start point
       return;
     }
+    if (s.shape === 'tri') {
+      // Triangle: apex at the top middle of the box, base along the bottom
+      const bx = box(a, b);
+      c.moveTo((bx.x0 + bx.x1) / 2, bx.y0);
+      c.lineTo(bx.x1, bx.y1);
+      c.lineTo(bx.x0, bx.y1);
+      c.closePath();
+      return;
+    }
     const bx = box(a, b);
     const w = bx.x1 - bx.x0, h = bx.y1 - bx.y0;
     if (s.shape === 'rect') { c.rect(bx.x0, bx.y0, w, h); return; }
@@ -722,7 +732,7 @@
     c.lineWidth = s.size;
     c.stroke();
     c.restore();
-    if (s.dims && (s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc')) drawDims(c, s);
+    if (s.dims && (s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc' || s.shape === 'tri')) drawDims(c, s);
   }
 
   // Dimension lines: width along the top edge, height down the right edge.
