@@ -67,20 +67,25 @@
   <button id="redoBtn" title="Redo" disabled>↷</button>
   <button id="clearBtn" title="Clear">🗑</button>
   <button id="saveBtn" title="Save PNG">💾</button>
-  <button id="copyBtn" title="Copy drawing to clipboard">📋</button>
+  <button id="copyBtn" title="Copy drawing to clipboard" aria-label="Copy drawing to clipboard">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+  </button>
 </div>
 
 <div id="stage">
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.2.1</div>
+<div id="version">v0.2.2</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.2.1';
+  const APP_VERSION = '0.2.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const canvas = document.getElementById('c');
