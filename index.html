@@ -359,13 +359,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.17.0</div>
+<div id="version">v0.18.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.17.0';
+  const APP_VERSION = '0.18.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -390,7 +390,12 @@
   // Items and layers are never edited in place; changes create new objects. That
   // makes history a list of earlier snapshots.
   let strokes = [];
-  let layers = [{ id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }];  // bottom to top
+  // The grid is a special layer at the bottom. It is generated from the grid settings,
+  // so it has no objects, and it prints only when it is visible.
+  let layers = [
+    { id: 'GRID', name: 'Grid', visible: false, opacity: 1, grid: true },
+    { id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }
+  ];  // bottom to top
   let activeLayer = 'L1';
   let layerSeq = 1;
   const layerCanvases = new Map();    // layer id -> offscreen canvas holding that layer's ink
@@ -407,7 +412,6 @@
   let penSize = 4;
   let eraserSize = 24;
   let shapeFilled = false;
-  let showGrid = false;
   let snap = false;
   let GRID = 48;             // grid spacing and snap step, in drawing units (set from the Grid drawer)
   let penInUse = false;      // once the Pencil is used, finger touches are ignored for drawing
@@ -769,18 +773,19 @@
     c.putImageData(img, 0, 0);
   }
 
-  function drawGrid() {
+  // Draws the grid into the grid layer's canvas, at the current zoom and spacing
+  function drawGrid(c) {
     const d = dpr(), s = view.scale;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     const x0 = -view.ox / s, x1 = (w - view.ox) / s;
     const y0 = -view.oy / s, y1 = (h - view.oy) / s;
-    ctx.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
-    ctx.strokeStyle = '#c9d3df';
-    ctx.lineWidth = 1 / s;   // one screen pixel at any zoom
-    ctx.beginPath();
-    for (let x = Math.floor(x0 / GRID) * GRID; x <= x1; x += GRID) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
-    for (let y = Math.floor(y0 / GRID) * GRID; y <= y1; y += GRID) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
-    ctx.stroke();
+    c.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
+    c.strokeStyle = '#c9d3df';
+    c.lineWidth = 1 / s;   // one screen pixel at any zoom
+    c.beginPath();
+    for (let x = Math.floor(x0 / GRID) * GRID; x <= x1; x += GRID) { c.moveTo(x, y0); c.lineTo(x, y1); }
+    for (let y = Math.floor(y0 / GRID) * GRID; y <= y1; y += GRID) { c.moveTo(x0, y); c.lineTo(x1, y); }
+    c.stroke();
   }
 
   // Selection outline plus handles, drawn in world space at screen-sized scale.
@@ -848,6 +853,23 @@
     c.restore();
   }
 
+  // The grid layer is generated for the current view, so it is rebuilt whenever the view,
+  // spacing or canvas size changes, even during a plain re-composite.
+  let gridKey = '';
+  const gridViewKey = () => [view.scale, view.ox, view.oy, GRID, canvas.width, canvas.height].join(',');
+  function refreshGridLayer() {
+    if (!layers.some(l => l.id === 'GRID' && l.grid)) return;
+    const key = gridViewKey();
+    if (key === gridKey) return;
+    gridKey = key;
+    const lc = layerCanvas('GRID');
+    const c = lc.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, lc.width, lc.height);
+    drawGrid(c);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
   // Rebuild every layer's ink from the item list (needed after zoom, pan, undo, or resize)
   function redrawInk() {
     for (const id of [...layerCanvases.keys()]) {
@@ -858,6 +880,7 @@
       const lctx = lc.getContext('2d');
       lctx.setTransform(1, 0, 0, 1, 0, 0);
       lctx.clearRect(0, 0, lc.width, lc.height);
+      if (l.grid) { drawGrid(lctx); gridKey = gridViewKey(); }
       for (const s of strokes) {
         if (s.layer !== l.id) continue;
         if (s.fill) {
@@ -877,12 +900,12 @@
   // Composite: white paper, optional grid, visible layers bottom to top with their
   // opacity, then the preview, then the selection outline
   function render() {
+    refreshGridLayer();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (showGrid) drawGrid();
     for (const l of layers) {
       if (!l.visible) continue;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1295,7 +1318,11 @@
   function restore(s) {
     endTextEdit();
     strokes = s.items;
-    layers = s.layers;
+    // Undo brings back objects and layers, but each layer keeps its current visibility and opacity
+    layers = s.layers.map(l => {
+      const now = layers.find(x => x.id === l.id);
+      return now ? { ...l, visible: now.visible, opacity: now.opacity } : l;
+    });
     if (!strokes.includes(selected)) selected = null;
     if (!layers.some(l => l.id === activeLayer)) activeLayer = layers[layers.length - 1].id;
     renderLayerList();
@@ -1357,7 +1384,7 @@
   function moveLayer(id, dir) {
     const idx = layers.findIndex(l => l.id === id);
     const j = idx + dir;
-    if (idx < 0 || j < 0 || j >= layers.length) return;
+    if (idx < 1 || j < 1 || j >= layers.length) return;   // the grid stays at the bottom
     const arr = layers.slice();
     [arr[idx], arr[j]] = [arr[j], arr[idx]];
     layers = arr;
@@ -1376,6 +1403,7 @@
 
       const name = el('span', { className: 'lname', textContent: l.name, title: 'Tap to select, double-tap to rename' });
       name.ondblclick = () => {
+        if (l.grid) return;
         const n = prompt('Layer name', l.name);
         if (n && n.trim()) updateLayer(l.id, { name: n.trim().slice(0, 30) }, true);
       };
@@ -1384,13 +1412,13 @@
       op.oninput = () => updateLayer(l.id, { opacity: Number(op.value) / 100 }, false);
       op.onclick = e => e.stopPropagation();
 
-      const up = el('button', { textContent: '↑', title: 'Move up', disabled: i === layers.length - 1 });
+      const up = el('button', { textContent: '↑', title: 'Move up', disabled: !!l.grid || i === layers.length - 1 });
       up.onclick = e => { e.stopPropagation(); moveLayer(l.id, 1); };
-      const down = el('button', { textContent: '↓', title: 'Move down', disabled: i === 0 });
+      const down = el('button', { textContent: '↓', title: 'Move down', disabled: !!l.grid || i <= 1 });
       down.onclick = e => { e.stopPropagation(); moveLayer(l.id, -1); };
 
       const row = el('div', { className: 'layer-row' + (l.id === activeLayer ? ' active' : '') }, eye, name, op, up, down);
-      row.onclick = () => { activeLayer = l.id; renderLayerList(); };
+      row.onclick = () => { if (!l.grid) activeLayer = l.id; renderLayerList(); };
       list.append(row);
     }
   }
@@ -1414,7 +1442,7 @@
   };
 
   $('delLayer').onclick = () => {
-    if (layers.length <= 1) { showToast('Keep at least one layer'); return; }
+    if (layers.filter(l => !l.grid).length <= 1) { showToast('Keep at least one layer'); return; }
     const idx = layers.findIndex(l => l.id === activeLayer);
     pushHistory(snapshot());
     const id = activeLayer;
@@ -1685,7 +1713,10 @@
     const items = strokes.map(s => (s.image
       ? { ...s, image: undefined, imageData: s.image.toDataURL('image/png') }
       : s));
-    return { format: 'pen-draw', version: 1, app: APP_VERSION, layers, layerSeq, activeLayer, items };
+    return {
+      format: 'pen-draw', version: 1, app: APP_VERSION, layers, layerSeq, activeLayer, items,
+      grid: { unit: gridUnit, inches: gridIn, cm: gridCm }
+    };
   }
 
   function downloadFile(file) {
@@ -1726,7 +1757,7 @@
 
   // Starts an empty project. With work on the page, it offers to save first.
   async function newProject() {
-    if (strokes.length || layers.length > 1) {
+    if (strokes.length || layers.length > 2) {
       if (confirm('Save the current project before starting a new one?')) {
         const saved = await saveProject();
         if (!saved) return;   // saving was cancelled or failed: keep the drawing
@@ -1736,7 +1767,7 @@
     }
     pushHistory(snapshot());
     endTextEdit();
-    layers = [{ id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }];
+    layers = [gridLayer(), { id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }];
     layerSeq = 1;
     activeLayer = 'L1';
     strokes = [];
@@ -1787,7 +1818,7 @@
     if (strokes.length && !confirm('Replace the current drawing with this project? You can undo this.')) return;
 
     try {
-      const newLayers = data.layers
+      let newLayers = data.layers
         .filter(l => l && typeof l.id === 'string')
         .map(l => ({
           id: l.id,
@@ -1796,6 +1827,20 @@
           opacity: Number.isFinite(Number(l.opacity)) ? Math.min(1, Math.max(0, Number(l.opacity))) : 1
         }));
       if (!newLayers.length) throw new Error('no layers');
+      // The grid layer always exists, at the bottom
+      const gridIn0 = newLayers.find(l => l.id === 'GRID');
+      newLayers = [
+        { id: 'GRID', name: 'Grid', visible: gridIn0 ? gridIn0.visible !== false : false,
+          opacity: gridIn0 && Number.isFinite(Number(gridIn0.opacity)) ? Math.min(1, Math.max(0, Number(gridIn0.opacity))) : 1, grid: true },
+        ...newLayers.filter(l => l.id !== 'GRID' && !l.grid)
+      ];
+      if (newLayers.length < 2) throw new Error('no drawing layer');
+      if (data.grid) {
+        gridUnit = data.grid.unit === 'cm' ? 'cm' : 'in';
+        gridIn = Math.min(4, Math.max(0.125, Number(data.grid.inches) || 0.5));
+        gridCm = Math.min(10, Math.max(0.5, Number(data.grid.cm) || 1));
+        updateGrid();
+      }
       const ids = new Set(newLayers.map(l => l.id));
 
       const items = [];
@@ -1804,7 +1849,8 @@
         const s = { ...raw };
         delete s.imageData;
         if (raw.imageData) s.image = await loadDataUrl(raw.imageData);
-        if (!ids.has(s.layer)) s.layer = newLayers[0].id;
+        // Objects never live on the grid layer; orphaned ones go to the bottom drawing layer
+        if (!ids.has(s.layer) || s.layer === 'GRID') s.layer = newLayers[1].id;
         if (validItem(s)) items.push(s);
       }
 
@@ -1812,7 +1858,7 @@
       endTextEdit();
       layers = newLayers;
       strokes = items;
-      activeLayer = ids.has(data.activeLayer) ? data.activeLayer : newLayers[newLayers.length - 1].id;
+      activeLayer = ids.has(data.activeLayer) && data.activeLayer !== 'GRID' ? data.activeLayer : newLayers[newLayers.length - 1].id;
       layerSeq = newLayers.reduce((m, l) => {
         const n = parseInt(l.id.slice(1), 10);
         return Number.isFinite(n) ? Math.max(m, n) : m;
@@ -1846,8 +1892,15 @@
   let dimKeep = false;      // keep those dimension lines on the drawing
   const FRACS = ['', '1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8'];
 
+  const gridLayer = () => layers.find(l => l.id === 'GRID');
+  const gridOn = () => !!(gridLayer() && gridLayer().visible);
+  function toggleGridLayer() {
+    updateLayer('GRID', { visible: !gridOn() }, true);
+    syncGridDrawer();
+  }
+
   function updateGrid() {
-    GRID = gridUnit === 'cm' ? gridCm * PX_PER_INCH / 2.54 : gridIn * PX_PER_INCH;
+    GRID =gridUnit === 'cm' ? gridCm * PX_PER_INCH / 2.54 : gridIn * PX_PER_INCH;
   }
 
   function gridLabel() {
@@ -1871,18 +1924,18 @@
     else gridCm = Math.min(10, Math.max(0.5, Math.round((gridCm + dir * 0.5) * 2) / 2));
     updateGrid();
     syncGridDrawer();
-    scheduleRender(false);
+    scheduleRender(true);   // rebuild the grid layer at the new spacing; objects are untouched
   }
 
   function syncGridDrawer() {
     $('gridValue').textContent = gridLabel();
     $('unitInBtn').classList.toggle('active', gridUnit === 'in');
     $('unitCmBtn').classList.toggle('active', gridUnit === 'cm');
-    $('gridShowBtn').textContent = showGrid ? '▦ Show grid: On' : '▦ Show grid: Off';
-    $('gridShowBtn').classList.toggle('active', showGrid);
+    $('gridShowBtn').textContent = gridOn() ? '▦ Show grid: On' : '▦ Show grid: Off';
+    $('gridShowBtn').classList.toggle('active', gridOn());
     $('snapBtn').textContent = snap ? '⊞ Snap to grid: On' : '⊞ Snap to grid: Off';
     $('snapBtn').classList.toggle('active', snap);
-    $('gridBtn').classList.toggle('active', showGrid);
+    $('gridBtn').classList.toggle('active', gridOn());
   }
 
   function syncDimButtons() {
@@ -2068,11 +2121,11 @@
   };
 
   // Grid drawer: shows the grid, sets its spacing and units, and turns snapping on or off
-  $('gridShowBtn').onclick = () => { showGrid = !showGrid; syncGridDrawer(); render(); };
+  $('gridShowBtn').onclick = toggleGridLayer;
   $('gridUp').onclick = () => stepGrid(1);
   $('gridDown').onclick = () => stepGrid(-1);
-  $('unitInBtn').onclick = () => { gridUnit = 'in'; updateGrid(); syncGridDrawer(); scheduleRender(false); };
-  $('unitCmBtn').onclick = () => { gridUnit = 'cm'; updateGrid(); syncGridDrawer(); scheduleRender(false); };
+  $('unitInBtn').onclick = () => { gridUnit = 'in'; updateGrid(); syncGridDrawer(); scheduleRender(true); };
+  $('unitCmBtn').onclick = () => { gridUnit = 'cm'; updateGrid(); syncGridDrawer(); scheduleRender(true); };
   $('snapBtn').onclick = () => { snap = !snap; syncGridDrawer(); };
   $('dimLiveBtn').onclick = () => { dimLive = !dimLive; syncDimButtons(); };
   $('dimKeepBtn').onclick = () => { dimKeep = !dimKeep; syncDimButtons(); };
