@@ -427,7 +427,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.27.3</div>
+<div id="version">v0.28.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -444,7 +444,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.27.3';
+  const APP_VERSION = '0.28.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -582,13 +582,18 @@
   // An arc's radius may not exceed 10 inches. That sets the least depth an arc of this half-chord can have,
   // so a nearly flat arc cannot have a huge circle, its radials running off the drawing and its centre lost.
   const ARC_RADIUS_INCHES = 10;
-  const arcMinDepth = half => {
+  // The depth range of an arc with this half-chord: its radius stays within the limit, and its sweep
+  // stays within ARC_SWEEP_MAX. Beyond 20 inches of chord the radius limit cannot apply.
+  const arcDepthRange = half => {
     const R = ARC_RADIUS_INCHES * PX_PER_INCH;
-    return half <= R ? R - Math.sqrt(R * R - half * half) : 0;   // beyond 20 inches of chord the cap cannot apply
+    if (half > R) return [0, ARC_DEPTH_RATIO * half];
+    const root = Math.sqrt(R * R - half * half);
+    return [R - root, Math.min(ARC_DEPTH_RATIO * half, R + root)];
   };
   const arcBulge = s => {
     const [a, b] = s.points, half = Math.hypot(b.x - a.x, b.y - a.y) / 2;
-    return Math.min(3 * half, Math.max(arcMinDepth(half), s.bulge ?? half));   // up to three half-chords deep
+    const [lo, hi] = arcDepthRange(half);
+    return Math.min(hi, Math.max(lo, s.bulge ?? half));
   };
   // An arc's selection frame: the chord is the near edge and the apex lies mid-way along the far edge
   const arcFrame = s => {
@@ -599,7 +604,8 @@
   // The circle an arc lies on, used by its radial handles. Null when the arc is flat.
   // theta is the signed sweep from end 0 to end 1; positive runs counter-clockwise.
   const TWO_PI = Math.PI * 2;
-  const ARC_SWEEP_MAX = 4 * Math.atan(3);   // the 3 half-chord bulge limit allows about 286 degrees
+  const ARC_SWEEP_MAX = 350 * Math.PI / 180;            // the largest sweep an arc may have
+  const ARC_DEPTH_RATIO = Math.tan(ARC_SWEEP_MAX / 4);  // depth ÷ half-chord at that sweep (about 23)
   const wrapAngle = t => Math.atan2(Math.sin(t), Math.cos(t));
   function arcCircle(s) {
     const [a, b] = s.points, n = arcNormal(s), h = arcBulge(s), L = Math.hypot(b.x - a.x, b.y - a.y) / 2;
@@ -661,6 +667,53 @@
     return { ...item, points: item.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) };
   }
 
+  // Snap for a dragged arc end: another object's end point first, then the grid when snapping is on
+  function snapEnd(q, skip) {
+    const tol = 12 / view.scale;
+    let best = null, bestD = tol;
+    for (const it of strokes) {
+      if (it === skip || it.image || it.kind === 'text' || !it.points || !it.points.length) continue;
+      for (const p of [it.points[0], it.points[it.points.length - 1]]) {
+        const dd = Math.hypot(p.x - q.x, p.y - q.y);
+        if (dd <= bestD) { bestD = dd; best = p; }
+      }
+    }
+    if (best) return { x: best.x, y: best.y };
+    return snap ? snapPt(q) : q;
+  }
+
+  // With the centre locked, an end handle places its end anywhere. The radius follows that end, and the
+  // other end slides along its radial to the same radius, so both stay on one circle about the locked centre.
+  function arcFreeEnd(ref, d, q) {
+    const O = d.centre, k = d.sweep.k, cap = ARC_RADIUS_INCHES * PX_PER_INCH;
+    const T = snapEnd(q, ref);
+    const dist = Math.hypot(T.x - O.x, T.y - O.y);
+    if (dist < 1e-3) return ref;
+    const R = Math.min(dist, cap);
+    const uT = Math.atan2(T.y - O.y, T.x - O.x);
+    const moved = { x: O.x + R * Math.cos(uT), y: O.y + R * Math.sin(uT) };
+    const other = ref.points[1 - k];
+    const uO = Math.atan2(other.y - O.y, other.x - O.x);
+    const slid = { x: O.x + R * Math.cos(uO), y: O.y + R * Math.sin(uO) };
+    const A = k === 0 ? moved : slid, B = k === 1 ? moved : slid;
+    // Keep the arc on its side: choose the sweep whose apex is nearest the old apex
+    const aA = Math.atan2(A.y - O.y, A.x - O.x), aB = Math.atan2(B.y - O.y, B.x - O.x);
+    const oldMid = d.sweep.phiA + d.sweep.theta / 2;
+    let sw = wrapAngle(aB - aA);
+    const altSw = sw - Math.sign(sw || 1) * TWO_PI;
+    const off = t => Math.abs(wrapAngle(aA + t / 2 - oldMid));
+    if (off(altSw) < off(sw)) sw = altSw;
+    const apex = { x: O.x + R * Math.cos(aA + sw / 2), y: O.y + R * Math.sin(aA + sw / 2) };
+    const M = mid(A, B), dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy) || 1;
+    const hs = ((apex.x - M.x) * -dy + (apex.y - M.y) * dx) / len;
+    return {
+      ...ref,
+      points: [{ ...ref.points[0], ...A }, { ...ref.points[1], ...B }],
+      side: hs < 0 ? -1 : 1,
+      bulge: Math.abs(hs)
+    };
+  }
+
   // Starts moving end k around the circle. The circle and the other end stay where they are.
   function arcSweepStart(s, k, pt) {
     const g = arcCircle(s);
@@ -713,7 +766,7 @@
     if (s.shape === 'arc') {
       // Rebuild the chord from the frame: near edge at local y = -h/2, apex on the far edge
       const u = { x: Math.cos(f.rot), y: Math.sin(f.rot) }, v = { x: -u.y, y: u.x };
-      const h = Math.min(Math.max(0, f.h), 1.5 * f.w);
+      const h = Math.min(Math.max(0, f.h), arcDepthRange(f.w / 2)[1]);
       const at = k => ({ x: f.cx + u.x * k * f.w / 2 - v.x * h / 2, y: f.cy + u.y * k * f.w / 2 - v.y * h / 2, p: 0.5 });
       return { ...s, points: [at(-1), at(1)], side: 1, bulge: h };
     }
@@ -1342,6 +1395,7 @@
       anchor: handle && handle.anchor ? handle.anchor : null
     };
     if (kind === 'sweep') drag.sweep = arcSweepStart(item, handle.end, pt);
+    if (kind === 'sweep' && item.lock) drag.centre = { x: item.lock.x, y: item.lock.y };   // locked: the end moves freely
     if (item.shape === 'arc' && (kind === 'rotate' || kind === 'centre')) {
       const g = arcCircle(item);
       if (g) drag.centre = g.O;
@@ -1357,6 +1411,7 @@
   function updateDrag(q) {
     // Only a real move counts for undo; a tap to select must not add an empty step
     if (Math.hypot(q.x - drag.start.x, q.y - drag.start.y) > 0.5 / view.scale) drag.moved = true;
+    drag.last = q;
     if (isFrame(drag.ref)) { updatePictureDrag(q); return; }
     const d = drag, b = d.box;
     let fn;
@@ -1405,8 +1460,8 @@
       if (snap) { const step = Math.PI / 12; rot = Math.round(rot / step) * step; }   // 15 degree steps
       item = applyFrame(ref, { ...o, rot });
     } else if (d.kind === 'sweep') {
-      // One end moves around the circle; the circle and the other end stay put
-      item = arcSweepItem(ref, d.sweep, q);
+      // Unlocked: one end moves round the circle, which stays put. Locked: the end goes where it is dropped.
+      item = d.centre ? arcFreeEnd(ref, d, q) : arcSweepItem(ref, d.sweep, q);
     } else if (d.kind === 'bulge') {
       // Only the far edge moves: the chord stays put and the apex follows the pointer.
       // Past the chord the apex moves to the other side, so the frame turns to face it.
@@ -1415,8 +1470,9 @@
       let hs = (q.x - M.x) * v.x + (q.y - M.y) * v.y;
       const dir = hs < 0 ? -1 : 1;
       hs = Math.abs(hs);
-      hs = Math.min(hs, 1.5 * o.w);
-      if (snap) hs = Math.min(1.5 * o.w, Math.round(hs / GRID) * GRID);
+      const maxDepth = arcDepthRange(o.w / 2)[1];
+      hs = Math.min(hs, maxDepth);
+      if (snap) hs = Math.min(maxDepth, Math.round(hs / GRID) * GRID);
       const dx = v.x * dir, dy = v.y * dir;
       item = applyFrame(ref, {
         cx: M.x + dx * hs / 2, cy: M.y + dy * hs / 2, w: o.w, h: hs, rot: Math.atan2(-dx, dy)
@@ -1452,7 +1508,10 @@
   }
 
   function finishDrag() {
-    if (drag.kind === 'centre' && !drag.moved) toggleArcLock(drag.ref);
+    // A tap is any press that stays within about 10 screen pixels, so finger jitter still counts as a tap
+    const last = drag.last || drag.start;
+    const tapped = Math.hypot(last.x - drag.start.x, last.y - drag.start.y) * view.scale <= 10;
+    if (drag.kind === 'centre' && tapped) toggleArcLock(drag.ref);
     else if (strokes !== drag.before.items && drag.moved) pushHistory(drag.before);
     drag = null;
     activePointerId = null;
