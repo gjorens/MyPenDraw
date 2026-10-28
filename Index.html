@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Pen Draw</title>
+<style>
+  :root { --bar-h: 56px; --ink: #111; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f4f1; font-family: -apple-system, system-ui, sans-serif; }
+
+  #toolbar {
+    position: fixed; top: 0; left: 0; right: 0; height: var(--bar-h);
+    display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    background: rgba(255,255,255,0.95); border-bottom: 1px solid #ddd;
+    overflow-x: auto; z-index: 10;
+  }
+  #toolbar button {
+    min-width: 40px; height: 40px; border-radius: 10px; border: 1px solid #ccc;
+    background: #fff; font-size: 16px; cursor: pointer; flex-shrink: 0;
+  }
+  #toolbar button.active { outline: 3px solid #4a7dff; outline-offset: 1px; }
+  #toolbar button:disabled { opacity: 0.35; }
+  .swatch { width: 28px !important; min-width: 28px !important; height: 28px !important; border-radius: 50% !important; padding: 0; }
+  .sep { width: 1px; height: 28px; background: #ddd; flex-shrink: 0; }
+  #size { width: 110px; flex-shrink: 0; }
+  #sizeLabel { font-size: 13px; color: #555; min-width: 24px; flex-shrink: 0; }
+
+  #stage { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button id="penBtn" class="active" title="Pen">✏️</button>
+  <button id="eraserBtn" title="Eraser">🧽</button>
+  <div class="sep"></div>
+  <button class="swatch" data-color="#111111" style="background:#111"></button>
+  <button class="swatch" data-color="#e03131" style="background:#e03131"></button>
+  <button class="swatch" data-color="#1c7ed6" style="background:#1c7ed6"></button>
+  <button class="swatch" data-color="#2f9e44" style="background:#2f9e44"></button>
+  <button class="swatch" data-color="#f08c00" style="background:#f08c00"></button>
+  <button class="swatch" data-color="#7048e8" style="background:#7048e8"></button>
+  <div class="sep"></div>
+  <input id="size" type="range" min="1" max="30" value="4">
+  <span id="sizeLabel">4</span>
+  <div class="sep"></div>
+  <button id="undoBtn" title="Undo" disabled>↶</button>
+  <button id="redoBtn" title="Redo" disabled>↷</button>
+  <button id="clearBtn" title="Clear">🗑</button>
+  <button id="saveBtn" title="Save PNG">💾</button>
+</div>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  // ---------- state ----------
+  let strokes = [];      // committed strokes: {color, size, eraser, points:[{x,y,p}]}
+  let redoStack = [];    // strokes removed by undo
+  let current = null;    // stroke in progress
+  let tool = 'pen';      // 'pen' | 'eraser'
+  let color = '#111111';
+  let baseSize = 4;
+  let penInUse = false;  // once the Pencil is used, finger touches are ignored (palm rejection)
+  let activePointerId = null;
+
+  // ---------- sizing ----------
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    // Keep existing drawing when the viewport changes
+    const snapshot = canvas.width ? canvas.toDataURL() : null;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    redraw();
+  }
+  window.addEventListener('resize', resize);
+
+  // ---------- drawing primitives ----------
+  // Width from pressure. Pen gives real pressure; mouse/finger fall back to a fixed value.
+  function widthFor(stroke, p) {
+    if (stroke.eraser) return stroke.size * 3;
+    const factor = p > 0 ? 0.4 + p * 1.2 : 1; // p is 0..1 from the Pencil
+    return Math.max(0.5, stroke.size * factor);
+  }
+
+  // Draw one smooth segment between the last two points using midpoint quadratic curves
+  function drawSegment(stroke, pts, i) {
+    const a = pts[i - 1], b = pts[i];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    ctx.save();
+    ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = stroke.color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = widthFor(stroke, (a.p + b.p) / 2);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(a.x, a.y, mid.x, mid.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawWholeStroke(stroke) {
+    const pts = stroke.points;
+    if (pts.length === 1) {
+      // Single dot
+      ctx.save();
+      ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
+      ctx.fillStyle = stroke.color;
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, widthFor(stroke, pts[0].p) / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    for (let i = 1; i < pts.length; i++) drawSegment(stroke, pts, i);
+  }
+
+  function redraw() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    // Eraser needs to cut from strokes below it, so we rebuild in order on a scratch canvas
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    for (const s of strokes) drawWholeStroke(s);
+    updateButtons();
+  }
+
+  // ---------- pointer handling ----------
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'pen') penInUse = true;
+    // Palm rejection: ignore finger touches once the Pencil has been used
+    if (e.pointerType === 'touch' && penInUse) return;
+    if (activePointerId !== null) return;
+    activePointerId = e.pointerId;
+    canvas.setPointerCapture(e.pointerId);
+
+    const { x, y } = pos(e);
+    const p = e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
+    current = {
+      color: tool === 'eraser' ? '#ffffff' : color,
+      size: baseSize,
+      eraser: tool === 'eraser',
+      points: [{ x, y, p }]
+    };
+    // Draw a dot immediately so taps show up
+    drawWholeStroke(current);
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!current || e.pointerId !== activePointerId) return;
+    // Use coalesced events for smoother Pencil input
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of events) {
+      const { x, y } = pos(ev);
+      const p = ev.pointerType === 'pen' ? (ev.pressure || 0.5) : 0.5;
+      current.points.push({ x, y, p });
+      drawSegment(current, current.points, current.points.length - 1);
+    }
+  });
+
+  function endStroke(e) {
+    if (!current || e.pointerId !== activePointerId) return;
+    if (current.points.length) {
+      strokes.push(current);
+      redoStack = [];
+    }
+    current = null;
+    activePointerId = null;
+    updateButtons();
+  }
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+
+  // ---------- undo / redo / clear ----------
+  function undo() {
+    if (!strokes.length) return;
+    redoStack.push(strokes.pop());
+    redraw();
+  }
+  function redo() {
+    if (!redoStack.length) return;
+    strokes.push(redoStack.pop());
+    redraw();
+  }
+  function clearAll() {
+    if (!strokes.length) return;
+    redoStack.push(...strokes.reverse());
+    strokes = [];
+    redraw();
+  }
+
+  function updateButtons() {
+    document.getElementById('undoBtn').disabled = strokes.length === 0;
+    document.getElementById('redoBtn').disabled = redoStack.length === 0;
+  }
+
+  // ---------- export ----------
+  function savePNG() {
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `drawing-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+  }
+
+  // ---------- toolbar ----------
+  function setActive(el) {
+    document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
+    if (el) el.classList.add('active');
+  }
+
+  document.getElementById('penBtn').onclick = e => { tool = 'pen'; setActive(e.currentTarget); };
+  document.getElementById('eraserBtn').onclick = e => { tool = 'eraser'; setActive(e.currentTarget); };
+
+  document.querySelectorAll('.swatch').forEach(btn => {
+    btn.onclick = e => {
+      color = btn.dataset.color;
+      tool = 'pen';
+      setActive(document.getElementById('penBtn'));
+      btn.classList.add('active');
+    };
+  });
+
+  const size = document.getElementById('size');
+  const sizeLabel = document.getElementById('sizeLabel');
+  size.addEventListener('input', () => {
+    baseSize = Number(size.value);
+    sizeLabel.textContent = baseSize;
+  });
+
+  document.getElementById('undoBtn').onclick = undo;
+  document.getElementById('redoBtn').onclick = redo;
+  document.getElementById('clearBtn').onclick = () => {
+    if (confirm('Clear the whole drawing? You can still undo.')) clearAll();
+  };
+  document.getElementById('saveBtn').onclick = savePNG;
+
+  // Keyboard shortcuts for when a keyboard is attached
+  window.addEventListener('keydown', e => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); savePNG(); }
+  });
+
+  // Prevent iOS double-tap zoom and rubber-band scroll on the canvas
+  document.addEventListener('gesturestart', e => e.preventDefault());
+
+  resize();
+  updateButtons();
+})();
+</script>
+</body>
+</html>
