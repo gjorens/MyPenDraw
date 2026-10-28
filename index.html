@@ -79,17 +79,11 @@
   .swatch.active, input.custom.active { box-shadow: 0 0 0 4px var(--accent) !important; }
   .opt-btn {
     width: 100%; height: 52px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
-    display: flex; align-items: center; gap: 12px; padding: 0 14px; font-size: 17px; font-weight: 600; color: #111; cursor: pointer; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px; font-size: 17px; font-weight: 600; color: #111; cursor: pointer; margin-bottom: 8px;
   }
   .opt-btn.active { background: #dbe7ff; border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
   .opt-row { display: flex; gap: 8px; }
-  .opt-row .opt-btn { margin-bottom: 0; justify-content: center; }
-
-  .ai-input, .ai-box {
-    width: 100%; border: 1.5px solid #7a7a7a; border-radius: 10px; padding: 8px;
-    font: 15px/1.4 -apple-system, system-ui, sans-serif; background: #fff; color: #111; margin-bottom: 8px;
-  }
-  .ai-box { font-size: 13px; resize: vertical; }
+  .opt-row .opt-btn { margin-bottom: 0; }
 
   /* ---------- layers panel ---------- */
   #layerPanel {
@@ -120,6 +114,7 @@
     position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
     background: #222; color: #fff; padding: 8px 14px; border-radius: 8px;
     font-size: 15px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 20;
+    width: max-content; max-width: 88vw; text-align: center;
   }
   #toast.show { opacity: 1; }
 </style>
@@ -130,7 +125,7 @@
 <nav id="rail">
   <div class="group">
     <div class="glabel">Tools</div>
-    <button class="rail-btn tool-btn" data-tool="select" id="selectBtn" title="Select, move, and resize">↖<span class="cap">Select</span></button>
+    <button class="rail-btn tool-btn" data-tool="select" id="selectBtn" title="Select, move, resize and rotate">↖<span class="cap">Select</span></button>
     <button class="rail-btn tool-btn" data-tool="pen" data-drawer="pen" id="penBtn" title="Pen">✏️<span class="cap">Pen</span></button>
     <button class="rail-btn tool-btn" data-tool="eraser" id="eraserBtn" title="Eraser">🧽<span class="cap">Eraser</span></button>
     <button class="rail-btn" data-drawer="shapes" id="shapeBtn" title="Shapes">
@@ -168,7 +163,7 @@
 
   <div class="group">
     <div class="glabel">File</div>
-    <button class="rail-btn" data-drawer="ai" id="aiBtn" title="AI drawing">✨<span class="cap">AI</span></button>
+    <button class="rail-btn" data-drawer="import" id="importBtn" title="Import pictures">📥<span class="cap">Import</span></button>
     <button class="rail-btn" id="saveBtn" title="Save PNG">💾<span class="cap">Save</span></button>
     <button class="rail-btn" id="copyBtn" title="Copy drawing to clipboard">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -246,25 +241,20 @@
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved.</p>
 </aside>
 
-<!-- AI drawer: build a request to copy into chat, then paste the JSON reply back -->
-<aside class="drawer" id="drawer-ai" aria-label="AI drawing">
-  <h3>AI drawing <button class="close" data-close aria-label="Close">✕</button></h3>
-  <div class="sub">1. Describe the drawing</div>
-  <input id="aiSubject" class="ai-input" type="text" maxlength="200" placeholder="e.g. a dog with a red ribbon on its head">
-  <div class="sub">2. Copy the request into chat</div>
-  <textarea id="aiRequest" class="ai-box" rows="9" readonly></textarea>
-  <button id="aiCopyRequest" class="opt-btn">Copy request</button>
-  <div class="sub">3. Paste the JSON reply here</div>
-  <textarea id="aiPaste" class="ai-box" rows="5" placeholder="Paste the chat reply here"></textarea>
-  <div class="opt-row">
-    <button id="aiPasteBtn" class="opt-btn">Paste</button>
-    <button id="aiDraw" class="opt-btn">Draw</button>
-  </div>
-  <p id="aiMsg" class="hint" role="alert"></p>
-  <p class="hint">Shapes go on the active layer as one undo step.</p>
+<!-- Import drawer: bring in pictures from Files, Photos, or the clipboard -->
+<aside class="drawer" id="drawer-import" aria-label="Import pictures">
+  <h3>Import <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Add a picture</div>
+  <button id="chooseFile" class="opt-btn">📂 Choose file</button>
+  <button id="pasteImg" class="opt-btn">📋 Paste picture</button>
+  <input id="fileInput" type="file" multiple hidden
+         accept=".svg,.png,.jpg,.jpeg,.webp,.gif,image/svg+xml,image/png,image/jpeg,image/webp,image/gif">
+  <p id="importMsg" class="hint" role="alert"></p>
+  <p class="hint">Supported: SVG, PNG, JPEG, WebP and GIF (first frame only). Up to 10 MB per file. Pictures go on the active layer, and you can then move, resize and rotate them.</p>
+  <p class="hint">SVG files stay sharp when enlarged. Once placed, an imported picture is a single object. Its parts can't be selected separately.</p>
 </aside>
 
-<!-- Colour swatches are shown in the drawer; layers float on the right -->
+<!-- Layers float on the right -->
 <div id="layerPanel" hidden>
   <div class="lp-head">
     <strong>Layers</strong>
@@ -281,13 +271,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.9.0</div>
+<div id="version">v0.10.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.9.0';
+  const APP_VERSION = '0.10.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -298,6 +288,9 @@
   const MIN_SCALE = 0.5, MAX_SCALE = 6;
   const HISTORY_LIMIT = 200;
   const CUSTOM_KEY = 'pendraw-custom-colors';
+  const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
+  const IMPORT_MAX_PX = 2048;     // longest side of the stored bitmap
+  const IMPORT_MAX_FILES = 10;
   const dpr = () => window.devicePixelRatio || 1;
 
   // ---------- state ----------
@@ -305,6 +298,7 @@
   //   freehand/line: {layer, color, size, eraser, straight, pointerType, points:[{x,y,p}]}
   //   shape:         {layer, shape:'rect'|'oval'|'arc', color, size, filled, side, points:[a,b]}
   //   fill:          {layer, fill:true, color, x, y}   (not selectable)
+  //   picture:       {layer, image:<canvas>, cx, cy, w, h, rot}  (centre, size, rotation in radians)
   // Items and layers are never edited in place; changes create new objects. That
   // makes history a list of earlier snapshots.
   let strokes = [];
@@ -317,7 +311,7 @@
   let current = null;        // item being drawn
   let preview = null;        // line or shape being dragged out (not yet committed)
   let selected = null;       // selected item
-  let drag = null;           // move or resize in progress
+  let drag = null;           // move, resize or rotate in progress
   let tool = 'pen';          // 'select' | 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
   let mode = 'curve';        // 'curve' | 'line' (pen only)
   let color = '#111111';
@@ -333,7 +327,7 @@
   const touches = new Map(); // active finger touches, used for pinch
   let gesture = null;        // pinch state
   let rafId = 0, pendingFull = false;
-  let openDrawer = null;     // 'colors' | 'pen' | 'shapes' | null
+  let openDrawer = null;     // 'colors' | 'pen' | 'shapes' | 'import' | null
 
   // ---------- custom colours (saved on this device) ----------
   function loadCustom() {
@@ -384,10 +378,26 @@
   const box = (a, b) => ({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
   const snapPt = p => ({ ...p, x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID });
 
+  // Picture helpers: local (unrotated) offsets to world points, and back
+  function localToWorld(s, lx, ly) {
+    const c = Math.cos(s.rot), sn = Math.sin(s.rot);
+    return { x: s.cx + lx * c - ly * sn, y: s.cy + lx * sn + ly * c };
+  }
+  function worldToLocal(s, p) {
+    const c = Math.cos(s.rot), sn = Math.sin(s.rot);
+    const dx = p.x - s.cx, dy = p.y - s.cy;
+    return { x: dx * c + dy * sn, y: -dx * sn + dy * c };
+  }
+  // Corners in order: top-left, top-right, bottom-right, bottom-left (local frame)
+  function pictureCorners(s) {
+    return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => localToWorld(s, a * s.w / 2, b * s.h / 2));
+  }
+
   // Bounding box of an item's points (no stroke width)
   function rawBox(s) {
+    const pts = s.image ? pictureCorners(s) : s.points;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const p of s.points) {
+    for (const p of pts) {
       x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
       x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
     }
@@ -472,8 +482,18 @@
     c.restore();
   }
 
+  // A picture is drawn at its world size and rotation, from the stored bitmap
+  function drawPicture(c, s) {
+    c.save();
+    c.translate(s.cx, s.cy);
+    c.rotate(s.rot);
+    c.drawImage(s.image, -s.w / 2, -s.h / 2, s.w, s.h);
+    c.restore();
+  }
+
   function drawStroke(c, stroke) {
     if (stroke.fill) return;                 // fills are applied to layer ink in redrawInk
+    if (stroke.image) { drawPicture(c, stroke); return; }
     if (stroke.shape) { drawShape(c, stroke); return; }
     const pts = stroke.points;
     if (stroke.straight && pts.length >= 2) {
@@ -563,24 +583,55 @@
     ctx.stroke();
   }
 
-  // Selection outline plus corner handles, drawn in world space at screen-sized scale
+  // Selection outline plus handles, drawn in world space at screen-sized scale.
+  // A picture gets a rotated outline and a rotate handle above it.
   function drawSelection(c) {
-    const b = rawBox(selected), s = view.scale;
-    const pad = (selected.size || 0) / 2 + 3 / s;
-    const h = 7 / s;
+    const s = view.scale;
     c.save();
     c.strokeStyle = '#1a3d9c';
-    c.lineWidth = 1.5 / s;
-    c.setLineDash([6 / s, 4 / s]);
-    c.strokeRect(b.x0 - pad, b.y0 - pad, (b.x1 - b.x0) + 2 * pad, (b.y1 - b.y0) + 2 * pad);
-    c.setLineDash([]);
     c.fillStyle = '#ffffff';
     c.lineWidth = 2 / s;
-    for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]) {
+    const h = 7 / s;
+    if (selected.image) {
+      const pts = pictureCorners(selected);
+      c.lineWidth = 1.5 / s;
+      c.setLineDash([6 / s, 4 / s]);
       c.beginPath();
-      c.rect(x - h, y - h, 2 * h, 2 * h);
+      pts.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
+      c.closePath();
+      c.stroke();
+      c.setLineDash([]);
+      const top = mid(pts[0], pts[1]);
+      const rot = localToWorld(selected, 0, -selected.h / 2 - 30 / s);
+      c.beginPath();
+      c.moveTo(top.x, top.y);
+      c.lineTo(rot.x, rot.y);
+      c.stroke();
+      c.beginPath();
+      c.arc(rot.x, rot.y, 7 / s, 0, Math.PI * 2);
       c.fill();
       c.stroke();
+      c.lineWidth = 2 / s;
+      for (const p of pts) {
+        c.beginPath();
+        c.rect(p.x - h, p.y - h, 2 * h, 2 * h);
+        c.fill();
+        c.stroke();
+      }
+    } else {
+      const b = rawBox(selected);
+      const pad = (selected.size || 0) / 2 + 3 / s;
+      c.lineWidth = 1.5 / s;
+      c.setLineDash([6 / s, 4 / s]);
+      c.strokeRect(b.x0 - pad, b.y0 - pad, (b.x1 - b.x0) + 2 * pad, (b.y1 - b.y0) + 2 * pad);
+      c.setLineDash([]);
+      c.lineWidth = 2 / s;
+      for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]) {
+        c.beginPath();
+        c.rect(x - h, y - h, 2 * h, 2 * h);
+        c.fill();
+        c.stroke();
+      }
     }
     c.restore();
   }
@@ -680,7 +731,10 @@
       if (s.fill) continue;
       const L = layers.find(l => l.id === s.layer);
       if (!L || !L.visible) continue;
-      if (s.shape) {
+      if (s.image) {
+        const q = worldToLocal(s, pt);
+        if (Math.abs(q.x) <= s.w / 2 + tol && Math.abs(q.y) <= s.h / 2 + tol) return s;
+      } else if (s.shape) {
         const b = rawBox(s), pad = (s.size || 0) / 2 + tol;
         if (pt.x >= b.x0 - pad && pt.x <= b.x1 + pad && pt.y >= b.y0 - pad && pt.y <= b.y1 + pad) return s;
       } else if (nearStroke(pt, s, tol)) {
@@ -690,33 +744,53 @@
     return null;
   }
 
-  // Corner handle under the point, or null. `anchor` is the opposite corner.
+  // Handle under the point for the selected item, or null:
+  //   {kind:'rotate'}                  picture rotate handle
+  //   {kind:'resize', sx, sy}          picture corner (sx, sy are local signs)
+  //   {kind:'resize', anchor}          shape corner (anchor is the opposite corner)
   function handleAt(pt) {
     if (!selected) return null;
-    const b = rawBox(selected), r = 14 / view.scale;
+    const s = view.scale, r = 14 / s;
+    if (selected.image) {
+      const rp = localToWorld(selected, 0, -selected.h / 2 - 30 / s);
+      if (Math.hypot(rp.x - pt.x, rp.y - pt.y) <= r) return { kind: 'rotate' };
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const p = localToWorld(selected, sx * selected.w / 2, sy * selected.h / 2);
+        if (Math.abs(p.x - pt.x) <= r && Math.abs(p.y - pt.y) <= r) return { kind: 'resize', sx, sy };
+      }
+      return null;
+    }
+    const b = rawBox(selected);
     const corners = [
       { x: b.x0, y: b.y0, anchor: { x: b.x1, y: b.y1 } },
       { x: b.x1, y: b.y0, anchor: { x: b.x0, y: b.y1 } },
       { x: b.x0, y: b.y1, anchor: { x: b.x1, y: b.y0 } },
       { x: b.x1, y: b.y1, anchor: { x: b.x0, y: b.y0 } }
     ];
-    return corners.find(c => Math.abs(c.x - pt.x) <= r && Math.abs(c.y - pt.y) <= r) || null;
+    const c = corners.find(c => Math.abs(c.x - pt.x) <= r && Math.abs(c.y - pt.y) <= r);
+    return c ? { kind: 'resize', anchor: c.anchor } : null;
   }
 
-  // ---------- move and resize ----------
-  function startDrag(kind, item, pt, anchor) {
+  // ---------- move, resize and rotate ----------
+  function startDrag(kind, item, pt, handle) {
     drag = {
       kind,
       ref: item,              // the original object, as it appears in the snapshot
       before: snapshot(),
       start: pt,
-      anchor,
-      orig: item.points.map(p => ({ ...p })),
-      box: rawBox(item)
+      handle,
+      anchor: handle && handle.anchor ? handle.anchor : null
     };
+    if (item.image) {
+      drag.orig = { cx: item.cx, cy: item.cy, w: item.w, h: item.h, rot: item.rot };
+    } else {
+      drag.orig = item.points.map(p => ({ ...p }));
+      drag.box = rawBox(item);
+    }
   }
 
   function updateDrag(q) {
+    if (drag.ref.image) { updatePictureDrag(q); return; }
     const d = drag, b = d.box;
     let fn;
     if (d.kind === 'move') {
@@ -736,6 +810,37 @@
     }
     const item = { ...d.ref, points: d.orig.map(p => ({ ...fn(p), p: p.p })) };
     strokes = d.before.items.map(s => (s === d.ref ? item : s));
+    selected = item;
+    scheduleRender(true);
+  }
+
+  // Picture move, rotate, and corner resize. Corner resize keeps the opposite corner
+  // fixed in the picture's own frame, so the picture can be resized while tilted.
+  function updatePictureDrag(q) {
+    const d = drag, o = d.orig, ref = d.ref;
+    let item;
+    if (d.kind === 'move') {
+      let cx = o.cx + (q.x - d.start.x), cy = o.cy + (q.y - d.start.y);
+      if (snap) { cx = Math.round(cx / GRID) * GRID; cy = Math.round(cy / GRID) * GRID; }
+      item = { ...ref, cx, cy };
+    } else if (d.kind === 'rotate') {
+      let rot = Math.atan2(q.y - o.cy, q.x - o.cx) + Math.PI / 2;
+      if (snap) { const step = Math.PI / 12; rot = Math.round(rot / step) * step; }   // 15 degree steps
+      item = { ...ref, rot };
+    } else {
+      const { sx, sy } = d.handle;
+      const src = { cx: o.cx, cy: o.cy, w: o.w, h: o.h, rot: o.rot };
+      const F = localToWorld(src, -sx * o.w / 2, -sy * o.h / 2);    // fixed opposite corner
+      const target = snap ? snapPt(q) : q;
+      const c = Math.cos(o.rot), sn = Math.sin(o.rot);
+      const vx = target.x - F.x, vy = target.y - F.y;
+      const lx = vx * c + vy * sn, ly = -vx * sn + vy * c;        // target in the picture's frame
+      const w = Math.max(4, sx * lx), h = Math.max(4, sy * ly);
+      const cx = F.x + (sx * w / 2) * c - (sy * h / 2) * sn;
+      const cy = F.y + (sx * w / 2) * sn + (sy * h / 2) * c;
+      item = { ...ref, cx, cy, w, h };
+    }
+    strokes = d.before.items.map(s => (s === ref ? item : s));
     selected = item;
     scheduleRender(true);
   }
@@ -806,13 +911,13 @@
     const isShape = SHAPES.includes(tool);
     const dragging = isShape || mode === 'line';   // these need a start and an end point
 
-    // Select: grab a corner to resize, or an object to move; tap empty space to deselect
+    // Select: grab a handle to resize or rotate, or an object to move; tap empty space to deselect
     if (tool === 'select') {
       activePointerId = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
-      const corner = handleAt(raw);
-      if (selected && corner) {
-        startDrag('resize', selected, raw, corner.anchor);
+      const handle = handleAt(raw);
+      if (selected && handle) {
+        startDrag(handle.kind, selected, raw, handle);
       } else {
         selected = hitItem(raw);
         if (selected) {
@@ -1067,168 +1172,98 @@
     redrawInk();
   };
 
-  // ---------- AI: request text and JSON import ----------
-  const SHAPE_KINDS = ['rect', 'oval', 'arc', 'stroke'];
-  const MAX_AI_ITEMS = 300;
-  const MAX_AI_POINTS = 4000;      // total points across all strokes
-  const MAX_STROKE_POINTS = 500;   // points in one stroke
-  const MAX_AI_CHARS = 200000;     // largest paste we will try to read
+  // ---------- import pictures ----------
+  const IMPORT_TYPES = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  const IMPORT_NAME = /\.(svg|png|jpe?g|webp|gif)$/i;
 
-  // Builds the chat request from the app's current settings, so the wording and
-  // the allowed colours always match what the app can import
-  function buildInstruction(subject) {
-    const fixed = [['Black', '#111111'], ['Red', '#e03131'], ['Blue', '#1c7ed6'],
-                   ['Green', '#2f9e44'], ['Orange', '#f08c00'], ['Purple', '#7048e8']];
-    const palette = [
-      ...fixed.map(([n, c]) => `${n} ${c}`),
-      ...customColors.map((c, i) => `Custom ${i + 1} ${c}`)
-    ].join(', ');
-    const W = Math.round(canvas.clientWidth), H = Math.round(canvas.clientHeight);
-    return [
-      'Return only one JSON object, with no text before or after it, in this format:',
-      '',
-      '{"items":[{"shape":"rect" | "oval" | "arc" | "stroke","color":"#rrggbb","size":1-30,"filled":true | false,"bulge":"left" | "right","points":[{"x":0,"y":0},{"x":0,"y":0}]}]}',
-      '',
-      `The drawing area is ${W} x ${H} units. (0, 0) is the top-left corner. x increases to the right and y increases downward.`,
-      '',
-      'Shapes:',
-      '- rect: points are two opposite corners.',
-      '- oval: points are two opposite corners of the box the oval fits in.',
-      '- arc: a half circle. points[0] is where the pen goes down and points[1] is where it lifts. The arc is the half circle between those two points.',
-      '- bulge sets which side the arc curves toward, judged while moving from points[0] to points[1] as seen on screen.',
-      '  "right" bulges to the right-hand side. From left to right it bulges downward, so a smile is "right".',
-      '  "left" bulges to the left-hand side. From left to right it bulges upward, so a frown is "left".',
-      '  bulge is ignored for rect, oval and stroke.',
-      '- stroke: a freehand line through its points in order. Use it for outlines, hair, fur and other detail.',
-      '  Give it points along the path, in whole numbers, with neighbouring points close together so the curve is smooth.',
-      '  filled is ignored for stroke.',
-      '',
-      'Other rules:',
-      '- size is the line width. Use 2 to 6 for outlines and larger for bold strokes.',
-      '- filled true fills the shape with its colour. false draws the outline only.',
-      `- color must be one of these: ${palette}.`,
-      `- Limits: at most ${MAX_AI_ITEMS} items and ${MAX_AI_POINTS} points in total, with at most ${MAX_STROKE_POINTS} points in one stroke. Count the points before you reply. A reply that is cut off cannot be imported.`,
-      '- Build the drawing from simple shapes and strokes placed carefully.',
-      '',
-      `Draw: ${subject || '(describe what to draw here)'}`
-    ].join('\n');
-  }
+  function setImportMsg(msg) { $('importMsg').textContent = msg; }
 
-  function refreshRequest() {
-    $('aiRequest').value = buildInstruction($('aiSubject').value.trim());
-  }
-
-  // Accepts the whole chat reply, including any code fences around the JSON
-  function parseAiJson(text) {
-    const s = text.trim();
-    if (s.length > MAX_AI_CHARS) throw new Error('That paste is too large. Ask chat for a simpler drawing.');
-    const first = s.indexOf('{'), last = s.lastIndexOf('}');
-    if (first < 0 || last <= first) throw new Error('No JSON found. Paste the whole reply from chat.');
-    let data;
-    try { data = JSON.parse(s.slice(first, last + 1)); }
-    catch (e) {
-      throw new Error('The JSON is not valid (' + e.message + '). If the reply was cut off, ask chat for a simpler drawing.');
-    }
-    if (!data || !Array.isArray(data.items)) throw new Error('The JSON needs an "items" list.');
-    if (data.items.length === 0) throw new Error('The "items" list is empty.');
-    if (data.items.length > MAX_AI_ITEMS) throw new Error(`Too many items (${data.items.length}). The limit is ${MAX_AI_ITEMS}.`);
-
-    let totalPoints = 0;
-    return data.items.map((it, i) => {
-      const n = i + 1;
-      if (!it || typeof it !== 'object') throw new Error(`Item ${n} is not an object.`);
-      if (!SHAPE_KINDS.includes(it.shape)) throw new Error(`Item ${n}: shape must be rect, oval, arc or stroke.`);
-      const isStroke = it.shape === 'stroke';
-      if (typeof it.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(it.color)) {
-        throw new Error(`Item ${n}: colour must look like #rrggbb.`);
-      }
-      const size = Number(it.size ?? 4);
-      if (!Number.isFinite(size)) throw new Error(`Item ${n}: size must be a number.`);
-      if (!Array.isArray(it.points) || (isStroke ? it.points.length < 1 : it.points.length !== 2)) {
-        throw new Error(`Item ${n}: points must have ${isStroke ? 'at least 1' : 'exactly 2'} {x, y} entries.`);
-      }
-      if (isStroke && it.points.length > MAX_STROKE_POINTS) {
-        throw new Error(`Item ${n}: a stroke can have at most ${MAX_STROKE_POINTS} points.`);
-      }
-      totalPoints += it.points.length;
-      if (totalPoints > MAX_AI_POINTS) {
-        throw new Error(`Too many points (over ${MAX_AI_POINTS}). Ask chat for a simpler drawing.`);
-      }
-      const pts = it.points.map(p => ({ x: Number(p?.x), y: Number(p?.y) }));
-      if (pts.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
-        throw new Error(`Item ${n}: x and y must be numbers.`);
-      }
-      return {
-        shape: isStroke ? null : it.shape,   // null marks a freehand stroke
-        color: it.color,
-        size: Math.min(30, Math.max(1, size)),
-        filled: it.filled === true,
-        // "right" maps to side 1 and "left" to side -1, matching the hand-drawn arc
-        side: it.bulge === 'left' ? -1 : 1,
-        points: pts.map(p => ({ ...p, p: 0.5 }))
+  // Loads a picture into a canvas at up to IMPORT_MAX_PX, and reports its natural size.
+  // SVG and raster files both go through an <img>, so the browser does the decoding.
+  function loadPicture(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const w = img.naturalWidth || 800, h = img.naturalHeight || 800;
+        const k = Math.min(1, IMPORT_MAX_PX / Math.max(w, h));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(w * k));
+        c.height = Math.max(1, Math.round(h * k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve({ canvas: c, w, h });
       };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable')); };
+      img.src = url;
     });
   }
 
-  function drawAiItems(items) {
-    pushHistory(snapshot());
-    strokes = [...strokes, ...items.map(it => ({ ...it, layer: activeLayer }))];
-    selected = null;
-    redrawInk();
-    const L = layers.find(l => l.id === activeLayer);
-    showToast(L && !L.visible
-      ? `Added ${items.length} shapes to a hidden layer`
-      : `Added ${items.length} shapes`);
+  // Places a loaded picture at the centre of the visible drawing area, sized to fit
+  function placePicture(loaded, offset) {
+    const sw = canvas.clientWidth / view.scale, sh = canvas.clientHeight / view.scale;
+    const fit = Math.min(1, Math.min(sw, sh) * 0.6 / Math.max(loaded.w, loaded.h));
+    const cx = (canvas.clientWidth / 2 - view.ox) / view.scale + offset;
+    const cy = (canvas.clientHeight / 2 - view.oy) / view.scale + offset;
+    return { layer: activeLayer, image: loaded.canvas, cx, cy, w: loaded.w * fit, h: loaded.h * fit, rot: 0 };
   }
 
-  function setAiMsg(msg) { $('aiMsg').textContent = msg; }
-
-  function fallbackCopy(text, done) {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, text.length);
-    let ok = false;
-    try { ok = document.execCommand('copy'); } catch (e) {}
-    ta.remove();
-    if (ok) done(); else showToast('Copy failed. Select the text and copy it.');
-  }
-
-  function copyText(text, okMsg) {
-    const done = () => showToast(okMsg);
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
-    } else {
-      fallbackCopy(text, done);
+  // Imports a list of files, one undo step each. Shows what was skipped and why.
+  async function importFiles(files) {
+    const list = [...files].slice(0, IMPORT_MAX_FILES);
+    const skipped = [];
+    let added = 0, lastItem = null;
+    for (const f of list) {
+      const okType = IMPORT_TYPES.includes(f.type) || IMPORT_NAME.test(f.name);
+      if (!okType) { skipped.push(`${f.name}: not a supported picture`); continue; }
+      if (f.size > IMPORT_MAX_BYTES) { skipped.push(`${f.name}: over 10 MB`); continue; }
+      try {
+        const item = placePicture(await loadPicture(f), added * 24);
+        pushHistory(snapshot());
+        strokes = [...strokes, item];
+        lastItem = item;
+        added++;
+      } catch (err) {
+        skipped.push(`${f.name}: could not be read`);
+      }
     }
+    if (added) {
+      selected = lastItem;
+      setTool('select');   // ready to move, resize or rotate straight away
+      openDrawer = null;
+      syncDrawers();
+      redrawInk();
+      renderLayerList();
+      const L = layers.find(l => l.id === activeLayer);
+      showToast(L && !L.visible
+        ? `Added ${added} picture(s) to a hidden layer`
+        : `Added ${added} picture(s)`);
+    }
+    if (files.length > IMPORT_MAX_FILES) skipped.push(`only the first ${IMPORT_MAX_FILES} files were used`);
+    setImportMsg(skipped.join('. '));
   }
 
-  $('aiSubject').addEventListener('input', refreshRequest);
-  $('aiCopyRequest').onclick = () => {
-    refreshRequest();
-    copyText($('aiRequest').value, 'Request copied. Paste it into chat.');
-  };
-  $('aiPasteBtn').onclick = async () => {
+  $('chooseFile').onclick = () => $('fileInput').click();
+  $('fileInput').addEventListener('change', e => {
+    const files = e.target.files;
+    e.target.value = '';   // allow choosing the same file again
+    if (files && files.length) importFiles(files);
+  });
+  $('pasteImg').onclick = async () => {
     try {
-      $('aiPaste').value = await navigator.clipboard.readText();
-      setAiMsg('');
-    } catch (e) {
-      setAiMsg('Tap the box and paste there.');
-      $('aiPaste').focus();
-    }
-  };
-  $('aiDraw').onclick = () => {
-    try {
-      const items = parseAiJson($('aiPaste').value);
-      drawAiItems(items);
-      $('aiPaste').value = '';
-      setAiMsg('');
-    } catch (e) {
-      setAiMsg(e.message);
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        const type = it.types.find(t => t.startsWith('image/'));
+        if (type) {
+          const blob = await it.getType(type);
+          const ext = type.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+          await importFiles([new File([blob], `pasted.${ext}`, { type })]);
+          return;
+        }
+      }
+      setImportMsg('No picture on the clipboard.');
+    } catch (err) {
+      setImportMsg('Could not read the clipboard. Use Choose file instead.');
     }
   };
 
@@ -1345,7 +1380,6 @@
     document.querySelectorAll('.drawer').forEach(d => {
       d.classList.toggle('open', d.id === 'drawer-' + openDrawer);
     });
-    if (openDrawer === 'ai') refreshRequest();   // rebuild so colours and canvas size are current
     document.querySelectorAll('[data-drawer]').forEach(b => {
       b.classList.toggle('open', b.dataset.drawer === openDrawer);
     });
