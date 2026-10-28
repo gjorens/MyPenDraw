@@ -427,7 +427,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.27.0</div>
+<div id="version">v0.27.1</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -444,7 +444,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.27.0';
+  const APP_VERSION = '0.27.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -605,14 +605,16 @@
     const theta = (((phiP - phiA) % TWO_PI + TWO_PI) % TWO_PI) < ccw ? ccw : ccw - TWO_PI;
     return { O, R, phiA, theta };
   }
-  // The radial through end k: a short line passing through the end, with its handle beyond
+  // The radial for end k runs from the circle's centre through the end, perpendicular to the
+  // tangent there. Its handle sits just beyond the end, and dragging it turns the radial about the centre.
   function arcRadial(s, k) {
     const g = arcCircle(s);
     if (!g) return null;
     const P = s.points[k], sc = view.scale;
     const ux = (P.x - g.O.x) / g.R, uy = (P.y - g.O.y) / g.R;
     return {
-      from: { x: P.x - ux * 12 / sc, y: P.y - uy * 12 / sc },
+      centre: g.O,
+      from: { x: g.O.x, y: g.O.y },
       handle: { x: P.x + ux * 18 / sc, y: P.y + uy * 18 / sc }
     };
   }
@@ -1032,6 +1034,13 @@
           c.moveTo(rd.from.x, rd.from.y);
           c.lineTo(rd.handle.x, rd.handle.y);
           c.stroke();
+          if (end === 0) {
+            // Mark the centre where the two radials bisect
+            c.beginPath();
+            c.arc(rd.centre.x, rd.centre.y, 3 / s, 0, Math.PI * 2);
+            c.fill();
+            c.stroke();
+          }
           c.lineWidth = 2 / s;
           c.beginPath();
           c.arc(rd.handle.x, rd.handle.y, 6 / s, 0, Math.PI * 2);
