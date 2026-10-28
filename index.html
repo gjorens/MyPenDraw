@@ -136,6 +136,7 @@
     width: max-content; max-width: 88vw; text-align: center;
   }
   #toast.show { opacity: 1; }
+  .rail-btn, .tool-btn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
   #choiceDialog {
     border: 2px solid #8a8a8a; border-radius: 14px; padding: 18px; width: min(360px, 88vw);
     background: #fff; color: #111; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
@@ -167,8 +168,8 @@
       </svg>
       <span class="cap">Measure</span>
     </button>
-    <button class="rail-btn tool-btn" data-tool="pen" data-drawer="pen" id="penBtn" title="Pen">✏️<span class="cap">Pen</span></button>
-    <button class="rail-btn tool-btn" data-tool="eraser" data-drawer="eraser" id="eraserBtn" title="Eraser">🧽<span class="cap">Eraser</span></button>
+    <button class="rail-btn tool-btn" data-tool="pen" data-drawer="pen" data-hold id="penBtn" title="Pen: tap to draw, hold for pen options">✏️<span class="cap">Pen</span></button>
+    <button class="rail-btn tool-btn" data-tool="eraser" data-drawer="eraser" data-hold id="eraserBtn" title="Eraser: tap to erase, hold for eraser options">🧽<span class="cap">Eraser</span></button>
     <button class="rail-btn" data-drawer="shapes" id="shapeBtn" title="Shapes">
       <span id="shapeIcon">▭</span><span class="cap">Shapes</span>
     </button>
@@ -372,7 +373,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.18.3</div>
+<div id="version">v0.18.4</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -383,7 +384,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.18.3';
+  const APP_VERSION = '0.18.4';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2131,15 +2132,41 @@
   }
 
   document.querySelectorAll('[data-drawer]').forEach(b => {
+    if (b.dataset.hold) return;   // Pen and Eraser are handled by holdToOpen below
     b.onclick = () => {
       const name = b.dataset.drawer;
       // Opening a drawer for a tool selects that tool
-      if (name === 'pen') setTool('pen');
-      if (name === 'eraser') setTool('eraser');
-      // With text selected, the Text button keeps the selection for editing
       if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
       if (name === 'shapes' && !SHAPES.includes(tool)) setTool('rect');
       toggleDrawer(name);
+    };
+  });
+
+  // Pen and Eraser: a tap selects the tool only; holding for about half a second opens its drawer.
+  // This keeps quick pen/eraser switching from covering the canvas with drawers.
+  const HOLD_MS = 500;
+  document.querySelectorAll('[data-hold]').forEach(b => {
+    const name = b.dataset.drawer, toolName = b.dataset.tool;
+    let timer = 0, held = false;
+    const cancel = () => clearTimeout(timer);
+    b.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      held = false;
+      cancel();
+      timer = setTimeout(() => {
+        held = true;
+        setTool(toolName);
+        openDrawer = name;
+        syncDrawers();
+      }, HOLD_MS);
+    });
+    b.addEventListener('pointerup', cancel);
+    b.addEventListener('pointerleave', cancel);
+    b.addEventListener('pointercancel', cancel);
+    b.addEventListener('contextmenu', e => e.preventDefault());   // no iPad callout on long press
+    b.onclick = () => {
+      if (held) { held = false; return; }   // the long press already opened the drawer
+      setTool(toolName);
     };
   });
 
