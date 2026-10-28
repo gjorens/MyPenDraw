@@ -213,6 +213,7 @@
   <div class="group">
     <div class="glabel">View</div>
     <button class="rail-btn" data-drawer="grid" id="gridBtn" title="Grid and snapping">▦<span class="cap">Grid</span></button>
+    <button class="rail-btn" id="dimAllBtn" title="Dimension lines on all shapes">📐<span class="cap">Dims</span></button>
     <button class="rail-btn" id="resetViewBtn" title="Reset zoom">⤢<span class="cap">Zoom 1:1</span></button>
   </div>
 
@@ -237,6 +238,7 @@
   <button class="bar-btn" id="copyObjBtn" title="Copy selected" disabled>⧉<span class="cap">Copy</span></button>
   <button class="bar-btn" id="pasteBtn" title="Paste" disabled>📋<span class="cap">Paste</span></button>
   <button class="bar-btn" id="delBtn" title="Delete selected" disabled>⌫<span class="cap">Delete</span></button>
+  <button class="bar-btn" id="dimSelBtn" title="Dimension lines for the selected shape" disabled>📐<span class="cap">Shape dims</span></button>
   <button class="bar-btn" data-drawer="import" id="importBtn" title="Pictures and projects">📁<span class="cap">Files</span></button>
   <button class="bar-btn" id="saveBtn" title="Save drawing as PNG">💾<span class="cap">Save PNG</span></button>
   <button class="bar-btn" id="copyBtn" title="Copy drawing as PNG to clipboard">
@@ -425,7 +427,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.25.0</div>
+<div id="version">v0.26.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -442,7 +444,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.25.0';
+  const APP_VERSION = '0.26.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -732,7 +734,7 @@
     c.lineWidth = s.size;
     c.stroke();
     c.restore();
-    if (s.dims && (s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc' || s.shape === 'tri')) drawDims(c, s);
+    if (showsDims(s) && isDimShape(s)) drawDims(c, s);
   }
 
   // Dimension lines: width along the top edge, height down the right edge.
@@ -1421,7 +1423,7 @@
       straight: !isShape && mode === 'line',
       shape: isShape ? tool : null,
       filled: isShape && shapeFilled,
-      dims: isShape && dimLive,   // dimension lines while drawing
+      dims: isShape && dimLive ? true : undefined,   // dimension lines while drawing; unset follows Dims
       pointerType: e.pointerType,
       points: dragging ? [pt, { ...pt }] : [raw]
     };
@@ -1508,7 +1510,11 @@
     }
     pushHistory(snapshot());
     // Dimension lines stay on the drawing only if "keep" is on
-    strokes = [...strokes, { ...current, dims: !!current.dims && dimKeep }];
+    // Dimension lines stay on the object only if "keep" is on; otherwise the object follows Dims
+    const finished = { ...current };
+    if (current.dims && dimKeep) finished.dims = true;
+    else delete finished.dims;
+    strokes = [...strokes, finished];
     current = null;
     activePointerId = null;
     preview = null;
@@ -1568,6 +1574,7 @@
 
   function updateButtons() {
     $('undoBtn').disabled = undoStack.length === 0;
+    syncDimControls();
     $('redoBtn').disabled = redoStack.length === 0;
     $('delBtn').disabled = !selected;
     $('cutBtn').disabled = !selected;
@@ -1925,7 +1932,8 @@
       : s));
     return {
       format: 'pen-draw', version: 1, app: APP_VERSION, layers, layerSeq, activeLayer, items,
-      grid: { unit: gridUnit, inches: gridIn, cm: gridCm }
+      grid: { unit: gridUnit, inches: gridIn, cm: gridCm },
+      dimsAll
     };
   }
 
@@ -2087,6 +2095,7 @@
         ...newLayers.filter(l => l.id !== 'GRID' && !l.grid)
       ];
       if (newLayers.length < 2) throw new Error('no drawing layer');
+      dimsAll = !!data.dimsAll;
       if (data.grid) {
         gridUnit = data.grid.unit === 'cm' ? 'cm' : 'in';
         gridIn = Math.min(4, Math.max(0.125, Number(data.grid.inches) || 0.5));
@@ -2151,6 +2160,7 @@
   let gridCm = 1;           // grid spacing in centimetres, in steps of 0.5
   let dimLive = false;      // dimension lines while drawing rectangles and ovals
   let dimKeep = false;      // keep those dimension lines on the drawing
+  let dimsAll = false;      // dimension lines on every shape that does not have its own setting
   const FRACS = ['', '1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8'];
 
   const gridLayer = () => layers.find(l => l.id === 'GRID');
@@ -2258,6 +2268,43 @@
     $('dimKeepBtn').textContent = dimKeep ? 'Keep dimensions on drawing: On' : 'Keep dimensions on drawing: Off';
     $('dimKeepBtn').classList.toggle('active', dimKeep);
   }
+
+  // ---------- dimension lines: all shapes, or one shape ----------
+  // An object's dims flag is true (always shown), false (never shown), or unset (follows Dims).
+  const isDimShape = s => s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc' || s.shape === 'tri';
+  const showsDims = s => (s.dims === true ? true : s.dims === false ? false : dimsAll);
+  function syncDimControls() {
+    const dimAll = $('dimAllBtn');
+    dimAll.classList.toggle('active', dimsAll);
+    dimAll.title = dimsAll ? 'Dimensions on all shapes: on (tap to hide)' : 'Dimensions on all shapes: off (tap to show)';
+    const ok = !!selected && isDimShape(selected);
+    $('dimSelBtn').disabled = !ok;
+    $('dimSelBtn').classList.toggle('active', ok && showsDims(selected));
+  }
+  // Shows or hides dimension lines on every shape. Each shape's own setting is cleared, so all follow.
+  function setDimsAll(on) {
+    pushHistory(snapshot());
+    const i = selected ? strokes.indexOf(selected) : -1;
+    dimsAll = on;
+    strokes = strokes.map(s => {
+      if (!('dims' in s)) return s;
+      const { dims, ...rest } = s;
+      return rest;
+    });
+    if (i >= 0) selected = strokes[i];
+    redrawInk();
+  }
+  $('dimAllBtn').onclick = () => setDimsAll(!dimsAll);
+  // Shows or hides dimension lines on the selected shape only
+  function toggleSelectedDims() {
+    if (!selected || !isDimShape(selected)) return;
+    pushHistory(snapshot());
+    const item = { ...selected, dims: !showsDims(selected) };
+    strokes = strokes.map(s => (s === selected ? item : s));
+    selected = item;
+    redrawInk();
+  }
+  $('dimSelBtn').onclick = toggleSelectedDims;
 
   // ---------- export ----------
   // Exports visible layers on white, without the grid, selection, or preview
