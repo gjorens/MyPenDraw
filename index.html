@@ -10,7 +10,7 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <meta name="apple-mobile-web-app-title" content="Pen Draw">
 <style>
-  :root { --bar-h: 56px; --ink: #111; }
+  :root { --bar-h: 56px; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f4f1; font-family: -apple-system, system-ui, sans-serif; }
 
@@ -26,6 +26,7 @@
   }
   #toolbar button.active { outline: 3px solid #4a7dff; outline-offset: 1px; }
   #toolbar button:disabled { opacity: 0.35; }
+  #toolbar button.text-btn { font-size: 15px; padding: 0 10px; }
   .swatch { width: 28px !important; min-width: 28px !important; height: 28px !important; border-radius: 50% !important; padding: 0; }
   .sep { width: 1px; height: 28px; background: #ddd; flex-shrink: 0; }
   #size { width: 110px; flex-shrink: 0; }
@@ -50,18 +51,23 @@
 <body>
 
 <div id="toolbar">
-  <button id="penBtn" class="active" title="Pen">✏️</button>
-  <button id="eraserBtn" title="Eraser">🧽</button>
+  <button id="penBtn" class="active" data-group="tool" title="Pen">✏️</button>
+  <button id="eraserBtn" data-group="tool" title="Eraser">🧽</button>
   <div class="sep"></div>
-  <button class="swatch" data-color="#111111" style="background:#111"></button>
-  <button class="swatch" data-color="#e03131" style="background:#e03131"></button>
-  <button class="swatch" data-color="#1c7ed6" style="background:#1c7ed6"></button>
-  <button class="swatch" data-color="#2f9e44" style="background:#2f9e44"></button>
-  <button class="swatch" data-color="#f08c00" style="background:#f08c00"></button>
-  <button class="swatch" data-color="#7048e8" style="background:#7048e8"></button>
+  <button class="swatch active" data-group="color" data-color="#111111" style="background:#111"></button>
+  <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131"></button>
+  <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6"></button>
+  <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44"></button>
+  <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00"></button>
+  <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8"></button>
   <div class="sep"></div>
-  <input id="size" type="range" min="1" max="30" value="4">
+  <input id="size" type="range" min="1" max="30" value="4" title="Brush or eraser width">
   <span id="sizeLabel">4</span>
+  <div class="sep"></div>
+  <button id="curveBtn" class="text-btn active" data-group="mode" title="Smooth curves">Curve</button>
+  <button id="lineBtn" class="text-btn" data-group="mode" title="Straight lines">Line</button>
+  <button id="gridBtn" title="Toggle grid">▦</button>
+  <button id="resetViewBtn" class="text-btn" title="Reset zoom">1:1</button>
   <div class="sep"></div>
   <button id="undoBtn" title="Undo" disabled>↶</button>
   <button id="redoBtn" title="Redo" disabled>↷</button>
@@ -79,184 +85,326 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.2.3</div>
+<div id="version">v0.3.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.2.3';
+  const APP_VERSION = '0.3.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
-  const canvas = document.getElementById('c');
+  const $ = id => document.getElementById(id);
+  const canvas = $('c');
   const ctx = canvas.getContext('2d');
+  // Committed strokes are drawn here, without the grid, so the eraser only cuts ink
+  const ink = document.createElement('canvas');
+  const ictx = ink.getContext('2d');
+
+  const GRID = 40;                       // grid spacing in drawing units
+  const MIN_SCALE = 0.5, MAX_SCALE = 6;
+  const dpr = () => window.devicePixelRatio || 1;
 
   // ---------- state ----------
-  let strokes = [];      // committed strokes: {color, size, eraser, points:[{x,y,p}]}
-  let redoStack = [];    // strokes removed by undo
-  let current = null;    // stroke in progress
-  let tool = 'pen';      // 'pen' | 'eraser'
+  let strokes = [];          // committed: {color, size, eraser, straight, pointerType, points:[{x,y,p}]}
+  let redoStack = [];
+  let current = null;        // stroke in progress
+  let preview = null;        // straight line being dragged (shown, not yet committed)
+  let tool = 'pen';          // 'pen' | 'eraser'
+  let mode = 'curve';        // 'curve' | 'line'
   let color = '#111111';
-  let baseSize = 4;
-  let penInUse = false;  // once the Pencil is used, finger touches are ignored (palm rejection)
+  let penSize = 4;
+  let eraserSize = 24;
+  let showGrid = false;
+  let penInUse = false;      // once the Pencil is used, finger touches are ignored for drawing
   let activePointerId = null;
+  let view = { scale: 1, ox: 0, oy: 0 };  // zoom and pan, in CSS pixels
+  const touches = new Map(); // active finger touches, used for pinch
+  let gesture = null;        // pinch state
+  let rafId = 0, pendingFull = false;
 
   // ---------- sizing ----------
   function resize() {
-    const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    // Keep existing drawing when the viewport changes
-    const snapshot = canvas.width ? canvas.toDataURL() : null;
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    redraw();
+    const d = dpr();
+    canvas.width = ink.width = Math.round(rect.width * d);
+    canvas.height = ink.height = Math.round(rect.height * d);
+    redrawInk();
   }
   window.addEventListener('resize', resize);
 
-  // ---------- drawing primitives ----------
-  // Width from pressure. Pen gives real pressure; mouse/finger fall back to a fixed value.
-  function widthFor(stroke, p) {
-    if (stroke.eraser) return stroke.size * 3;
-    const factor = p > 0 ? 0.4 + p * 1.2 : 1; // p is 0..1 from the Pencil
-    return Math.max(0.5, stroke.size * factor);
+  // ---------- drawing ----------
+  function setTransform(c) {
+    const d = dpr(), s = view.scale;
+    c.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
   }
 
-  // Midpoint smoothing: each curve runs from the midpoint before point i-1 to the
-  // midpoint after it, with point i-1 as the control. The first and last curves
-  // reach the real first and last points, so no gaps appear, even on quick strokes.
   function mid(a, b) {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
 
-  function drawSegment(stroke, pts, i) {
+  function widthFor(stroke, p) {
+    if (stroke.eraser) return stroke.size;
+    return Math.max(0.5, stroke.size * (0.4 + p * 1.2));
+  }
+
+  function styleFor(c, stroke) {
+    c.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
+    c.strokeStyle = stroke.color;
+    c.fillStyle = stroke.color;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+  }
+
+  // Midpoint smoothing: each curve runs between midpoints, with the real point as
+  // the control, so consecutive curves join with no gaps.
+  function drawSegment(c, stroke, pts, i) {
     const n = pts.length;
     const start = i === 1 ? pts[0] : mid(pts[i - 2], pts[i - 1]);
     const control = pts[i - 1];
     const end = i === n - 1 ? pts[i] : mid(pts[i - 1], pts[i]);
-    ctx.save();
-    ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = stroke.color;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = widthFor(stroke, (pts[i - 1].p + pts[i].p) / 2);
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
-    ctx.stroke();
-    ctx.restore();
+    c.save();
+    styleFor(c, stroke);
+    c.lineWidth = widthFor(stroke, (pts[i - 1].p + pts[i].p) / 2);
+    c.beginPath();
+    c.moveTo(start.x, start.y);
+    c.quadraticCurveTo(control.x, control.y, end.x, end.y);
+    c.stroke();
+    c.restore();
   }
 
-  function drawWholeStroke(stroke) {
+  function drawStroke(c, stroke) {
     const pts = stroke.points;
-    if (pts.length === 1) {
-      // Single dot
-      ctx.save();
-      ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
-      ctx.fillStyle = stroke.color;
-      ctx.beginPath();
-      ctx.arc(pts[0].x, pts[0].y, widthFor(stroke, pts[0].p) / 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+    if (stroke.straight && pts.length >= 2) {
+      c.save();
+      styleFor(c, stroke);
+      c.lineWidth = widthFor(stroke, pts[0].p);
+      c.beginPath();
+      c.moveTo(pts[0].x, pts[0].y);
+      c.lineTo(pts[1].x, pts[1].y);
+      c.stroke();
+      c.restore();
       return;
     }
-    for (let i = 1; i < pts.length; i++) drawSegment(stroke, pts, i);
+    if (pts.length === 1) {
+      c.save();
+      styleFor(c, stroke);
+      c.beginPath();
+      c.arc(pts[0].x, pts[0].y, widthFor(stroke, pts[0].p) / 2, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+      return;
+    }
+    for (let i = 1; i < pts.length; i++) drawSegment(c, stroke, pts, i);
   }
 
-  function redraw() {
+  function drawGrid() {
+    const d = dpr(), s = view.scale;
     const w = canvas.clientWidth, h = canvas.clientHeight;
-    ctx.save();
+    const x0 = -view.ox / s, x1 = (w - view.ox) / s;
+    const y0 = -view.oy / s, y1 = (h - view.oy) / s;
+    ctx.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
+    ctx.strokeStyle = '#dfe6ee';
+    ctx.lineWidth = 1 / s;   // keeps the grid one screen pixel wide at any zoom
+    ctx.beginPath();
+    for (let x = Math.floor(x0 / GRID) * GRID; x <= x1; x += GRID) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+    for (let y = Math.floor(y0 / GRID) * GRID; y <= y1; y += GRID) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.stroke();
+  }
+
+  // Rebuild the committed ink from scratch (needed after zoom, pan, undo or resize)
+  function redrawInk() {
+    ictx.setTransform(1, 0, 0, 1, 0, 0);
+    ictx.clearRect(0, 0, ink.width, ink.height);
+    setTransform(ictx);
+    for (const s of strokes) drawStroke(ictx, s);
+    render();
+    updateButtons();
+  }
+
+  // Composite: white paper, optional grid, ink, then any straight-line preview
+  function render() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
-    // Eraser needs to cut from strokes below it, so we rebuild in order on a scratch canvas
-    const dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, h);
-    for (const s of strokes) drawWholeStroke(s);
-    updateButtons();
+    if (showGrid) drawGrid();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(ink, 0, 0);
+    if (preview) {
+      setTransform(ctx);
+      // Eraser preview shows as a grey guide line; the real erase happens on release
+      const p = preview.eraser
+        ? { ...preview, eraser: false, color: 'rgba(120,120,120,0.7)' }
+        : preview;
+      drawStroke(ctx, p);
+    }
+  }
+
+  // Coalesce redraws to one per animation frame
+  function scheduleRender(full) {
+    pendingFull = pendingFull || full;
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      if (pendingFull) { pendingFull = false; redrawInk(); }
+      else render();
+    });
+  }
+
+  // ---------- coordinates ----------
+  function toWorld(e) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left - view.ox) / view.scale,
+      y: (e.clientY - r.top - view.oy) / view.scale,
+      p: e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5
+    };
+  }
+
+  // ---------- pinch to zoom and pan ----------
+  function startGesture() {
+    if (current && current.pointerType === 'touch') cancelCurrent();
+    const [a, b] = [...touches.values()];
+    gesture = {
+      dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+      mx: (a.x + b.x) / 2,
+      my: (a.y + b.y) / 2,
+      view: { ...view }
+    };
+  }
+
+  function updateGesture() {
+    const [a, b] = [...touches.values()];
+    const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const r = canvas.getBoundingClientRect();
+    const s0 = gesture.view.scale;
+    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s0 * dist / gesture.dist));
+    // The drawing point that sat under the starting midpoint stays under the current midpoint
+    const wx = (gesture.mx - r.left - gesture.view.ox) / s0;
+    const wy = (gesture.my - r.top - gesture.view.oy) / s0;
+    view = { scale, ox: mx - r.left - wx * scale, oy: my - r.top - wy * scale };
+    scheduleRender(true);
+  }
+
+  function cancelCurrent() {
+    current = null;
+    activePointerId = null;
+    preview = null;
+    redrawInk();
   }
 
   // ---------- pointer handling ----------
-  function pos(e) {
-    const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  }
-
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'pen') penInUse = true;
-    // Palm rejection: ignore finger touches once the Pencil has been used
-    if (e.pointerType === 'touch' && penInUse) return;
-    if (activePointerId !== null) return;
+
+    if (e.pointerType === 'touch') {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      canvas.setPointerCapture(e.pointerId);
+      if (touches.size >= 2) { startGesture(); return; }
+      if (penInUse) return;   // palm rejection: a lone finger doesn't draw once the Pencil is in use
+    }
+
+    if (gesture || activePointerId !== null) return;
     activePointerId = e.pointerId;
     canvas.setPointerCapture(e.pointerId);
 
-    const { x, y } = pos(e);
-    const p = e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
+    const pt = toWorld(e);
     current = {
-      color: tool === 'eraser' ? '#ffffff' : color,
-      size: baseSize,
+      color,
+      size: tool === 'eraser' ? eraserSize : penSize,
       eraser: tool === 'eraser',
-      points: [{ x, y, p }]
+      straight: mode === 'line',
+      pointerType: e.pointerType,
+      points: mode === 'line' ? [pt, { ...pt }] : [pt]
     };
-    // Draw a dot immediately so taps show up
-    drawWholeStroke(current);
+    if (current.straight) {
+      preview = current;
+    } else {
+      setTransform(ictx);
+      drawStroke(ictx, current);   // tap shows as a dot
+    }
+    scheduleRender(false);
   });
 
   canvas.addEventListener('pointermove', e => {
-    if (!current || e.pointerId !== activePointerId) return;
-    // Use coalesced events for smoother Pencil input
-    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-    for (const ev of events) {
-      const { x, y } = pos(ev);
-      const p = ev.pointerType === 'pen' ? (ev.pressure || 0.5) : 0.5;
-      current.points.push({ x, y, p });
-      drawSegment(current, current.points, current.points.length - 1);
+    if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (gesture) { if (touches.size >= 2) updateGesture(); return; }
     }
+    if (gesture || !current || e.pointerId !== activePointerId) return;
+
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    setTransform(ictx);
+    for (const ev of events) {
+      const pt = toWorld(ev);
+      if (current.straight) {
+        current.points[1] = pt;
+      } else {
+        current.points.push(pt);
+        drawSegment(ictx, current, current.points, current.points.length - 1);
+      }
+    }
+    if (current.straight) preview = current;
+    scheduleRender(false);
   });
 
-  function endStroke(e) {
-    if (!current || e.pointerId !== activePointerId) return;
-    if (current.points.length) {
-      strokes.push(current);
-      redoStack = [];
+  function endPointer(e) {
+    if (e.pointerType === 'touch') {
+      touches.delete(e.pointerId);
+      if (touches.size < 2) gesture = null;
     }
+    if (!current || e.pointerId !== activePointerId) return;
+    strokes.push(current);
+    redoStack = [];
     current = null;
     activePointerId = null;
+    preview = null;
+    scheduleRender(true);   // rebuild ink so straight lines and eraser cuts settle exactly
     updateButtons();
   }
-  canvas.addEventListener('pointerup', endStroke);
-  canvas.addEventListener('pointercancel', endStroke);
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
 
   // ---------- undo / redo / clear ----------
   function undo() {
     if (!strokes.length) return;
     redoStack.push(strokes.pop());
-    redraw();
+    redrawInk();
   }
   function redo() {
     if (!redoStack.length) return;
     strokes.push(redoStack.pop());
-    redraw();
+    redrawInk();
   }
   function clearAll() {
     if (!strokes.length) return;
     redoStack.push(...strokes.reverse());
     strokes = [];
-    redraw();
+    redrawInk();
   }
 
   function updateButtons() {
-    document.getElementById('undoBtn').disabled = strokes.length === 0;
-    document.getElementById('redoBtn').disabled = redoStack.length === 0;
+    $('undoBtn').disabled = strokes.length === 0;
+    $('redoBtn').disabled = redoStack.length === 0;
   }
 
   // ---------- export ----------
+  // Exports the ink on white, without the grid or any preview
+  function exportCanvas() {
+    const c = document.createElement('canvas');
+    c.width = ink.width;
+    c.height = ink.height;
+    const cx = c.getContext('2d');
+    cx.fillStyle = '#ffffff';
+    cx.fillRect(0, 0, c.width, c.height);
+    cx.drawImage(ink, 0, 0);
+    return c;
+  }
+
   function savePNG() {
-    canvas.toBlob(blob => {
+    exportCanvas().toBlob(blob => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -270,19 +418,19 @@
 
   // ---------- copy to clipboard ----------
   function showToast(msg) {
-    const t = document.getElementById('toast');
+    const t = $('toast');
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(showToast._timer);
     showToast._timer = setTimeout(() => t.classList.remove('show'), 1800);
   }
 
-  async function copyDrawing() {
+  function copyDrawing() {
     if (!navigator.clipboard || !window.ClipboardItem) {
       showToast('Copy not supported here. Use 💾 to save instead.');
       return;
     }
-    canvas.toBlob(async blob => {
+    exportCanvas().toBlob(async blob => {
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
         showToast('Drawing copied to clipboard');
@@ -294,37 +442,59 @@
   }
 
   // ---------- toolbar ----------
-  function setActive(el) {
-    document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
-    if (el) el.classList.add('active');
+  function setGroup(group, el) {
+    document.querySelectorAll(`[data-group="${group}"]`).forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
   }
 
-  document.getElementById('penBtn').onclick = e => { tool = 'pen'; setActive(e.currentTarget); };
-  document.getElementById('eraserBtn').onclick = e => { tool = 'eraser'; setActive(e.currentTarget); };
+  const size = $('size');
+  const sizeLabel = $('sizeLabel');
+  // The slider controls whichever tool is active, with its own range and stored value
+  function syncSlider() {
+    if (tool === 'eraser') { size.min = 4; size.max = 80; size.value = eraserSize; }
+    else { size.min = 1; size.max = 30; size.value = penSize; }
+    sizeLabel.textContent = size.value;
+  }
+  size.addEventListener('input', () => {
+    if (tool === 'eraser') eraserSize = Number(size.value);
+    else penSize = Number(size.value);
+    sizeLabel.textContent = size.value;
+  });
+
+  $('penBtn').onclick = e => { tool = 'pen'; setGroup('tool', e.currentTarget); syncSlider(); };
+  $('eraserBtn').onclick = e => { tool = 'eraser'; setGroup('tool', e.currentTarget); syncSlider(); };
 
   document.querySelectorAll('.swatch').forEach(btn => {
-    btn.onclick = e => {
+    btn.onclick = () => {
       color = btn.dataset.color;
       tool = 'pen';
-      setActive(document.getElementById('penBtn'));
-      btn.classList.add('active');
+      setGroup('tool', $('penBtn'));
+      setGroup('color', btn);
+      syncSlider();
     };
   });
 
-  const size = document.getElementById('size');
-  const sizeLabel = document.getElementById('sizeLabel');
-  size.addEventListener('input', () => {
-    baseSize = Number(size.value);
-    sizeLabel.textContent = baseSize;
-  });
+  $('curveBtn').onclick = e => { mode = 'curve'; setGroup('mode', e.currentTarget); };
+  $('lineBtn').onclick = e => { mode = 'line'; setGroup('mode', e.currentTarget); };
 
-  document.getElementById('undoBtn').onclick = undo;
-  document.getElementById('redoBtn').onclick = redo;
-  document.getElementById('clearBtn').onclick = () => {
+  $('gridBtn').onclick = e => {
+    showGrid = !showGrid;
+    e.currentTarget.classList.toggle('active', showGrid);
+    render();
+  };
+
+  $('resetViewBtn').onclick = () => {
+    view = { scale: 1, ox: 0, oy: 0 };
+    scheduleRender(true);
+  };
+
+  $('undoBtn').onclick = undo;
+  $('redoBtn').onclick = redo;
+  $('clearBtn').onclick = () => {
     if (confirm('Clear the whole drawing? You can still undo.')) clearAll();
   };
-  document.getElementById('saveBtn').onclick = savePNG;
-  document.getElementById('copyBtn').onclick = copyDrawing;
+  $('saveBtn').onclick = savePNG;
+  $('copyBtn').onclick = copyDrawing;
 
   // Keyboard shortcuts for when a keyboard is attached
   window.addEventListener('keydown', e => {
@@ -337,6 +507,7 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
 
   resize();
+  syncSlider();
   updateButtons();
 })();
 </script>
