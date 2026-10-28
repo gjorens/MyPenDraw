@@ -271,13 +271,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.10.0</div>
+<div id="version">v0.10.1</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.10.0';
+  const APP_VERSION = '0.10.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1245,9 +1245,9 @@
 
   $('chooseFile').onclick = () => $('fileInput').click();
   $('fileInput').addEventListener('change', e => {
-    const files = e.target.files;
-    e.target.value = '';   // allow choosing the same file again
-    if (files && files.length) importFiles(files);
+    const files = [...(e.target.files || [])];   // copy first: clearing the input empties its FileList
+    e.target.value = '';                          // allow choosing the same file again
+    if (files.length) importFiles(files);
   });
   $('pasteImg').onclick = async () => {
     try {
