@@ -175,6 +175,9 @@
 
   <div class="group">
     <div class="glabel">Edit</div>
+    <button class="rail-btn" id="cutBtn" title="Cut selected" disabled>✂️<span class="cap">Cut</span></button>
+    <button class="rail-btn" id="copyObjBtn" title="Copy selected" disabled>⧉<span class="cap">Copy</span></button>
+    <button class="rail-btn" id="pasteBtn" title="Paste" disabled>📋<span class="cap">Paste</span></button>
     <button class="rail-btn" id="delBtn" title="Delete selected" disabled>⌫<span class="cap">Delete</span></button>
     <button class="rail-btn" id="clearBtn" title="Clear all">🗑<span class="cap">Clear</span></button>
   </div>
@@ -200,12 +203,12 @@
   <span id="sizeLabel">4</span>
   <button class="bar-btn" data-drawer="import" id="importBtn" title="Import pictures">📥<span class="cap">Import</span></button>
   <button class="bar-btn" id="saveBtn" title="Save PNG">💾<span class="cap">Save</span></button>
-  <button class="bar-btn" id="copyBtn" title="Copy drawing to clipboard">
+  <button class="bar-btn" id="copyBtn" title="Copy drawing as PNG to clipboard">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
     </svg>
-    <span class="cap">Copy</span>
+    <span class="cap">PNG</span>
   </button>
   <span class="bar-spacer"></span>
   <button class="bar-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
@@ -318,13 +321,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.13.0</div>
+<div id="version">v0.14.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.13.0';
+  const APP_VERSION = '0.14.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1194,6 +1197,9 @@
     $('undoBtn').disabled = undoStack.length === 0;
     $('redoBtn').disabled = redoStack.length === 0;
     $('delBtn').disabled = !selected;
+    $('cutBtn').disabled = !selected;
+    $('copyObjBtn').disabled = !selected;
+    $('pasteBtn').disabled = !clipboardItem;
   }
 
   // ---------- layers ----------
@@ -1487,6 +1493,52 @@
     syncTextDrawer();
   };
 
+  // ---------- cut, copy and paste of objects ----------
+  // The clipboard holds an object within this app. Items are never edited in place,
+  // so keeping a reference is enough. Each paste lands a little offset from the last.
+  let clipboardItem = null;
+  let pasteCount = 0;
+  const PASTE_OFFSET = 24;
+
+  function offsetItem(s, dx, dy) {
+    if (s.points) return { ...s, points: s.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) };
+    return { ...s, cx: s.cx + dx, cy: s.cy + dy };   // pictures and text
+  }
+
+  function copySelected() {
+    if (!selected) return;
+    clipboardItem = selected;
+    pasteCount = 0;
+    showToast('Copied');
+    updateButtons();
+  }
+
+  function cutSelected() {
+    if (!selected) return;
+    clipboardItem = selected;
+    pasteCount = 0;
+    deleteSelected();
+    showToast('Cut');
+    updateButtons();
+  }
+
+  function pasteClipboard() {
+    if (!clipboardItem) { showToast('Nothing to paste'); return; }
+    pasteCount++;
+    const off = PASTE_OFFSET * pasteCount;
+    const item = offsetItem({ ...clipboardItem, layer: activeLayer }, off, off);
+    pushHistory(snapshot());
+    strokes = [...strokes, item];
+    selected = item;
+    setTool('select');   // keeps the pasted object selected, ready to move
+    redrawInk();
+    renderLayerList();
+  }
+
+  $('cutBtn').onclick = cutSelected;
+  $('copyObjBtn').onclick = copySelected;
+  $('pasteBtn').onclick = pasteClipboard;
+
   // ---------- export ----------
   // Exports visible layers on white, without the grid, selection, or preview
   function exportCanvas() {
@@ -1699,10 +1751,14 @@
 
   // Keyboard shortcuts for when a keyboard is attached
   window.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT') return;
+    // Typing in the text box, inputs, or drop-downs must not trigger these shortcuts
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); savePNG(); }
+    if (mod && e.key.toLowerCase() === 'x') { e.preventDefault(); cutSelected(); }
+    if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); copySelected(); }
+    if (mod && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteClipboard(); }
     if (!mod && (e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); deleteSelected(); }
   });
 
