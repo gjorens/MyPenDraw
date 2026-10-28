@@ -281,13 +281,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.8.0</div>
+<div id="version">v0.9.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.8.0';
+  const APP_VERSION = '0.9.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1068,8 +1068,11 @@
   };
 
   // ---------- AI: request text and JSON import ----------
-  const SHAPE_KINDS = ['rect', 'oval', 'arc'];
+  const SHAPE_KINDS = ['rect', 'oval', 'arc', 'stroke'];
   const MAX_AI_ITEMS = 300;
+  const MAX_AI_POINTS = 4000;      // total points across all strokes
+  const MAX_STROKE_POINTS = 500;   // points in one stroke
+  const MAX_AI_CHARS = 200000;     // largest paste we will try to read
 
   // Builds the chat request from the app's current settings, so the wording and
   // the allowed colours always match what the app can import
@@ -1084,7 +1087,7 @@
     return [
       'Return only one JSON object, with no text before or after it, in this format:',
       '',
-      '{"items":[{"shape":"rect" | "oval" | "arc","color":"#rrggbb","size":1-30,"filled":true | false,"bulge":"left" | "right","points":[{"x":0,"y":0},{"x":0,"y":0}]}]}',
+      '{"items":[{"shape":"rect" | "oval" | "arc" | "stroke","color":"#rrggbb","size":1-30,"filled":true | false,"bulge":"left" | "right","points":[{"x":0,"y":0},{"x":0,"y":0}]}]}',
       '',
       `The drawing area is ${W} x ${H} units. (0, 0) is the top-left corner. x increases to the right and y increases downward.`,
       '',
@@ -1095,13 +1098,17 @@
       '- bulge sets which side the arc curves toward, judged while moving from points[0] to points[1] as seen on screen.',
       '  "right" bulges to the right-hand side. From left to right it bulges downward, so a smile is "right".',
       '  "left" bulges to the left-hand side. From left to right it bulges upward, so a frown is "left".',
-      '  bulge is ignored for rect and oval.',
+      '  bulge is ignored for rect, oval and stroke.',
+      '- stroke: a freehand line through its points in order. Use it for outlines, hair, fur and other detail.',
+      '  Give it points along the path, in whole numbers, with neighbouring points close together so the curve is smooth.',
+      '  filled is ignored for stroke.',
       '',
       'Other rules:',
       '- size is the line width. Use 2 to 6 for outlines and larger for bold strokes.',
       '- filled true fills the shape with its colour. false draws the outline only.',
       `- color must be one of these: ${palette}.`,
-      `- Use at most ${MAX_AI_ITEMS} items. Build the drawing from simple shapes placed carefully.`,
+      `- Limits: at most ${MAX_AI_ITEMS} items and ${MAX_AI_POINTS} points in total, with at most ${MAX_STROKE_POINTS} points in one stroke. Count the points before you reply. A reply that is cut off cannot be imported.`,
+      '- Build the drawing from simple shapes and strokes placed carefully.',
       '',
       `Draw: ${subject || '(describe what to draw here)'}`
     ].join('\n');
@@ -1114,33 +1121,45 @@
   // Accepts the whole chat reply, including any code fences around the JSON
   function parseAiJson(text) {
     const s = text.trim();
+    if (s.length > MAX_AI_CHARS) throw new Error('That paste is too large. Ask chat for a simpler drawing.');
     const first = s.indexOf('{'), last = s.lastIndexOf('}');
     if (first < 0 || last <= first) throw new Error('No JSON found. Paste the whole reply from chat.');
     let data;
     try { data = JSON.parse(s.slice(first, last + 1)); }
-    catch (e) { throw new Error('The JSON is not valid: ' + e.message); }
+    catch (e) {
+      throw new Error('The JSON is not valid (' + e.message + '). If the reply was cut off, ask chat for a simpler drawing.');
+    }
     if (!data || !Array.isArray(data.items)) throw new Error('The JSON needs an "items" list.');
     if (data.items.length === 0) throw new Error('The "items" list is empty.');
     if (data.items.length > MAX_AI_ITEMS) throw new Error(`Too many items (${data.items.length}). The limit is ${MAX_AI_ITEMS}.`);
 
+    let totalPoints = 0;
     return data.items.map((it, i) => {
       const n = i + 1;
       if (!it || typeof it !== 'object') throw new Error(`Item ${n} is not an object.`);
-      if (!SHAPE_KINDS.includes(it.shape)) throw new Error(`Item ${n}: shape must be rect, oval or arc.`);
+      if (!SHAPE_KINDS.includes(it.shape)) throw new Error(`Item ${n}: shape must be rect, oval, arc or stroke.`);
+      const isStroke = it.shape === 'stroke';
       if (typeof it.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(it.color)) {
         throw new Error(`Item ${n}: colour must look like #rrggbb.`);
       }
       const size = Number(it.size ?? 4);
       if (!Number.isFinite(size)) throw new Error(`Item ${n}: size must be a number.`);
-      if (!Array.isArray(it.points) || it.points.length !== 2) {
-        throw new Error(`Item ${n}: points needs exactly two {x, y} entries.`);
+      if (!Array.isArray(it.points) || (isStroke ? it.points.length < 1 : it.points.length !== 2)) {
+        throw new Error(`Item ${n}: points must have ${isStroke ? 'at least 1' : 'exactly 2'} {x, y} entries.`);
+      }
+      if (isStroke && it.points.length > MAX_STROKE_POINTS) {
+        throw new Error(`Item ${n}: a stroke can have at most ${MAX_STROKE_POINTS} points.`);
+      }
+      totalPoints += it.points.length;
+      if (totalPoints > MAX_AI_POINTS) {
+        throw new Error(`Too many points (over ${MAX_AI_POINTS}). Ask chat for a simpler drawing.`);
       }
       const pts = it.points.map(p => ({ x: Number(p?.x), y: Number(p?.y) }));
       if (pts.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
         throw new Error(`Item ${n}: x and y must be numbers.`);
       }
       return {
-        shape: it.shape,
+        shape: isStroke ? null : it.shape,   // null marks a freehand stroke
         color: it.color,
         size: Math.min(30, Math.max(1, size)),
         filled: it.filled === true,
