@@ -28,8 +28,10 @@
   #toolbar button:disabled { opacity: 0.35; }
   #toolbar button.text-btn { font-size: 15px; padding: 0 10px; }
   .swatch { width: 28px !important; min-width: 28px !important; height: 28px !important; border-radius: 50% !important; padding: 0; }
+  #colorPick { width: 40px; height: 40px; padding: 3px; border: 1px solid #ccc; border-radius: 10px; background: #fff; flex-shrink: 0; cursor: pointer; }
   .sep { width: 1px; height: 28px; background: #ddd; flex-shrink: 0; }
   #size { width: 110px; flex-shrink: 0; }
+  #size:disabled { opacity: 0.35; }
   #sizeLabel { font-size: 13px; color: #555; min-width: 24px; flex-shrink: 0; }
 
   #stage { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
@@ -53,7 +55,12 @@
 <div id="toolbar">
   <button id="penBtn" class="active" data-group="tool" title="Pen">✏️</button>
   <button id="eraserBtn" data-group="tool" title="Eraser">🧽</button>
+  <button id="rectBtn" data-group="tool" title="Rectangle">▭</button>
+  <button id="ovalBtn" data-group="tool" title="Oval">○</button>
+  <button id="arcBtn" data-group="tool" title="Arc">◠</button>
+  <button id="fillBtn" class="text-btn" data-group="tool" title="Fill area">Fill</button>
   <div class="sep"></div>
+  <input id="colorPick" type="color" value="#111111" title="Pick any color">
   <button class="swatch active" data-group="color" data-color="#111111" style="background:#111"></button>
   <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131"></button>
   <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6"></button>
@@ -61,9 +68,10 @@
   <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00"></button>
   <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8"></button>
   <div class="sep"></div>
-  <input id="size" type="range" min="1" max="30" value="4" title="Brush or eraser width">
+  <input id="size" type="range" min="1" max="30" value="4" title="Brush, eraser, or outline width">
   <span id="sizeLabel">4</span>
   <div class="sep"></div>
+  <button id="solidBtn" title="Filled shapes">■</button>
   <button id="curveBtn" class="text-btn active" data-group="mode" title="Smooth curves">Curve</button>
   <button id="lineBtn" class="text-btn" data-group="mode" title="Straight lines">Line</button>
   <button id="gridBtn" title="Toggle grid">▦</button>
@@ -85,36 +93,43 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.3.0</div>
+<div id="version">v0.4.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.3.0';
+  const APP_VERSION = '0.4.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
   const canvas = $('c');
   const ctx = canvas.getContext('2d');
-  // Committed strokes are drawn here, without the grid, so the eraser only cuts ink
+  // Committed strokes, shapes, and fills are drawn here, without the grid,
+  // so the eraser only cuts ink and the grid never gets filled over.
   const ink = document.createElement('canvas');
   const ictx = ink.getContext('2d');
 
   const GRID = 40;                       // grid spacing in drawing units
   const MIN_SCALE = 0.5, MAX_SCALE = 6;
+  const SHAPES = ['rect', 'oval', 'arc'];
   const dpr = () => window.devicePixelRatio || 1;
 
   // ---------- state ----------
-  let strokes = [];          // committed: {color, size, eraser, straight, pointerType, points:[{x,y,p}]}
+  // Committed items, in order. Each is one of:
+  //   freehand/line: {color, size, eraser, straight, pointerType, points:[{x,y,p}]}
+  //   shape:         {shape:'rect'|'oval'|'arc', color, size, filled, points:[a,b]}
+  //   fill:          {fill:true, color, x, y}   (x, y in drawing units)
+  let strokes = [];
   let redoStack = [];
-  let current = null;        // stroke in progress
-  let preview = null;        // straight line being dragged (shown, not yet committed)
-  let tool = 'pen';          // 'pen' | 'eraser'
-  let mode = 'curve';        // 'curve' | 'line'
+  let current = null;        // item in progress
+  let preview = null;        // straight line or shape being dragged (not yet committed)
+  let tool = 'pen';          // 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
+  let mode = 'curve';        // 'curve' | 'line' (pen only)
   let color = '#111111';
   let penSize = 4;
   let eraserSize = 24;
+  let shapeFilled = false;
   let showGrid = false;
   let penInUse = false;      // once the Pencil is used, finger touches are ignored for drawing
   let activePointerId = null;
@@ -173,7 +188,35 @@
     c.restore();
   }
 
+  // Builds the path for a rectangle, oval, or top-half arc inside the dragged box.
+  function shapePath(c, s, closed) {
+    const [a, b] = s.points;
+    const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+    const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+    c.beginPath();
+    if (s.shape === 'rect') { c.rect(x, y, w, h); return; }
+    const cx = x + w / 2, cy = y + h / 2, rx = w / 2, ry = h / 2;
+    if (s.shape === 'oval') { c.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); return; }
+    c.ellipse(cx, cy, rx, ry, 0, Math.PI, Math.PI * 2);   // top half of the box
+    if (closed) c.closePath();                              // closes the arc with a chord
+  }
+
+  function drawShape(c, s) {
+    c.save();
+    styleFor(c, s);
+    if (s.filled) {
+      shapePath(c, s, true);
+      c.fill();
+    }
+    shapePath(c, s, false);
+    c.lineWidth = s.size;
+    c.stroke();
+    c.restore();
+  }
+
   function drawStroke(c, stroke) {
+    if (stroke.fill) return;                 // fills are applied to ink in redrawInk
+    if (stroke.shape) { drawShape(c, stroke); return; }
     const pts = stroke.points;
     if (stroke.straight && pts.length >= 2) {
       c.save();
@@ -198,6 +241,57 @@
     for (let i = 1; i < pts.length; i++) drawSegment(c, stroke, pts, i);
   }
 
+  // Paint-bucket fill on the ink layer. Fills the connected area that matches
+  // the color under the seed (transparent areas are the usual target).
+  function floodFill(f) {
+    const W = ink.width, H = ink.height;
+    const d = dpr(), k = view.scale;
+    const sx = Math.round((f.x * k + view.ox) * d);
+    const sy = Math.round((f.y * k + view.oy) * d);
+    if (sx < 0 || sy < 0 || sx >= W || sy >= H) return;
+
+    const img = ictx.getImageData(0, 0, W, H);
+    const data = img.data;
+    const seed = (sy * W + sx) * 4;
+    const tr = data[seed], tg = data[seed + 1], tb = data[seed + 2], ta = data[seed + 3];
+    const fr = parseInt(f.color.slice(1, 3), 16);
+    const fg = parseInt(f.color.slice(3, 5), 16);
+    const fb = parseInt(f.color.slice(5, 7), 16);
+    if (tr === fr && tg === fg && tb === fb && ta === 255) return;   // already this color
+
+    const TOL = 24;
+    const match = o => Math.abs(data[o] - tr) + Math.abs(data[o + 1] - tg) +
+                       Math.abs(data[o + 2] - tb) + Math.abs(data[o + 3] - ta) <= TOL;
+    const visited = new Uint8Array(W * H);
+    const stack = [sx, sy];
+
+    // Scanline flood fill
+    while (stack.length) {
+      const y = stack.pop(), x = stack.pop();
+      if (visited[y * W + x] || !match((y * W + x) * 4)) continue;
+      let x1 = x, x2 = x;
+      while (x1 > 0 && !visited[y * W + x1 - 1] && match((y * W + x1 - 1) * 4)) x1--;
+      while (x2 < W - 1 && !visited[y * W + x2 + 1] && match((y * W + x2 + 1) * 4)) x2++;
+      for (let i = x1; i <= x2; i++) {
+        const q = y * W + i;
+        visited[q] = 1;
+        const o = q * 4;
+        data[o] = fr; data[o + 1] = fg; data[o + 2] = fb; data[o + 3] = 255;
+      }
+      for (const ny of [y - 1, y + 1]) {
+        if (ny < 0 || ny >= H) continue;
+        let inRun = false;
+        for (let i = x1; i <= x2; i++) {
+          const q = ny * W + i;
+          const ok = !visited[q] && match(q * 4);
+          if (ok && !inRun) { stack.push(i, ny); inRun = true; }
+          else if (!ok) inRun = false;
+        }
+      }
+    }
+    ictx.putImageData(img, 0, 0);
+  }
+
   function drawGrid() {
     const d = dpr(), s = view.scale;
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -216,13 +310,21 @@
   function redrawInk() {
     ictx.setTransform(1, 0, 0, 1, 0, 0);
     ictx.clearRect(0, 0, ink.width, ink.height);
-    setTransform(ictx);
-    for (const s of strokes) drawStroke(ictx, s);
+    for (const s of strokes) {
+      if (s.fill) {
+        ictx.setTransform(1, 0, 0, 1, 0, 0);
+        floodFill(s);
+      } else {
+        setTransform(ictx);
+        drawStroke(ictx, s);
+      }
+    }
+    ictx.setTransform(1, 0, 0, 1, 0, 0);
     render();
     updateButtons();
   }
 
-  // Composite: white paper, optional grid, ink, then any straight-line preview
+  // Composite: white paper, optional grid, ink, then any preview
   function render() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
@@ -307,19 +409,33 @@
     }
 
     if (gesture || activePointerId !== null) return;
+
+    const pt = toWorld(e);
+
+    // Paint bucket: one tap applies a fill and does not start a drag
+    if (tool === 'fill') {
+      strokes.push({ fill: true, color, x: pt.x, y: pt.y });
+      redoStack = [];
+      redrawInk();
+      return;
+    }
+
     activePointerId = e.pointerId;
     canvas.setPointerCapture(e.pointerId);
 
-    const pt = toWorld(e);
+    const isShape = SHAPES.includes(tool);
+    const dragged = isShape || mode === 'line';   // these need a start and an end point
     current = {
       color,
       size: tool === 'eraser' ? eraserSize : penSize,
       eraser: tool === 'eraser',
-      straight: mode === 'line',
+      straight: !isShape && mode === 'line',
+      shape: isShape ? tool : null,
+      filled: isShape && shapeFilled,
       pointerType: e.pointerType,
-      points: mode === 'line' ? [pt, { ...pt }] : [pt]
+      points: dragged ? [pt, { ...pt }] : [pt]
     };
-    if (current.straight) {
+    if (current.straight || current.shape) {
       preview = current;
     } else {
       setTransform(ictx);
@@ -336,17 +452,18 @@
     if (gesture || !current || e.pointerId !== activePointerId) return;
 
     const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    const dragging = current.straight || current.shape;
     setTransform(ictx);
     for (const ev of events) {
       const pt = toWorld(ev);
-      if (current.straight) {
+      if (dragging) {
         current.points[1] = pt;
       } else {
         current.points.push(pt);
         drawSegment(ictx, current, current.points, current.points.length - 1);
       }
     }
-    if (current.straight) preview = current;
+    if (dragging) preview = current;
     scheduleRender(false);
   });
 
@@ -361,7 +478,7 @@
     current = null;
     activePointerId = null;
     preview = null;
-    scheduleRender(true);   // rebuild ink so straight lines and eraser cuts settle exactly
+    scheduleRender(true);   // rebuild ink so shapes, lines and eraser cuts settle exactly
     updateButtons();
   }
   canvas.addEventListener('pointerup', endPointer);
@@ -444,13 +561,14 @@
   // ---------- toolbar ----------
   function setGroup(group, el) {
     document.querySelectorAll(`[data-group="${group}"]`).forEach(b => b.classList.remove('active'));
-    el.classList.add('active');
+    if (el) el.classList.add('active');
   }
 
   const size = $('size');
   const sizeLabel = $('sizeLabel');
   // The slider controls whichever tool is active, with its own range and stored value
   function syncSlider() {
+    size.disabled = tool === 'fill';
     if (tool === 'eraser') { size.min = 4; size.max = 80; size.value = eraserSize; }
     else { size.min = 1; size.max = 30; size.value = penSize; }
     sizeLabel.textContent = size.value;
@@ -461,18 +579,40 @@
     sizeLabel.textContent = size.value;
   });
 
-  $('penBtn').onclick = e => { tool = 'pen'; setGroup('tool', e.currentTarget); syncSlider(); };
-  $('eraserBtn').onclick = e => { tool = 'eraser'; setGroup('tool', e.currentTarget); syncSlider(); };
+  function setTool(t, el) {
+    tool = t;
+    setGroup('tool', el);
+    syncSlider();
+  }
+
+  $('penBtn').onclick = e => setTool('pen', e.currentTarget);
+  $('eraserBtn').onclick = e => setTool('eraser', e.currentTarget);
+  $('rectBtn').onclick = e => setTool('rect', e.currentTarget);
+  $('ovalBtn').onclick = e => setTool('oval', e.currentTarget);
+  $('arcBtn').onclick = e => setTool('arc', e.currentTarget);
+  $('fillBtn').onclick = e => setTool('fill', e.currentTarget);
+
+  const colorPick = $('colorPick');
+  // Picking any color switches to a drawing tool, since the eraser ignores color
+  colorPick.addEventListener('input', () => {
+    color = colorPick.value;
+    if (tool === 'eraser') setTool('pen', $('penBtn'));
+    setGroup('color', null);
+  });
 
   document.querySelectorAll('.swatch').forEach(btn => {
     btn.onclick = () => {
       color = btn.dataset.color;
-      tool = 'pen';
-      setGroup('tool', $('penBtn'));
+      colorPick.value = color;
+      if (tool === 'eraser') setTool('pen', $('penBtn'));
       setGroup('color', btn);
-      syncSlider();
     };
   });
+
+  $('solidBtn').onclick = e => {
+    shapeFilled = !shapeFilled;
+    e.currentTarget.classList.toggle('active', shapeFilled);
+  };
 
   $('curveBtn').onclick = e => { mode = 'curve'; setGroup('mode', e.currentTarget); };
   $('lineBtn').onclick = e => { mode = 'line'; setGroup('mode', e.currentTarget); };
