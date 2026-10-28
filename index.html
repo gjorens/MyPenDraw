@@ -310,7 +310,7 @@
   <div class="sub">Dimensions</div>
   <button id="dimLiveBtn" class="opt-btn">📏 Dimensions while drawing: Off</button>
   <button id="dimKeepBtn" class="opt-btn">Keep dimensions on drawing: Off</button>
-  <p class="hint">Dimensions show the width and height of a rectangle or oval as you draw it. Keep them to leave them on the drawing.</p>
+  <p class="hint">Dimensions show the width and height of a rectangle or oval as you draw it. For an arc, the width is the chord and the height is the bulge. Keep them to leave them on the drawing.</p>
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved. Select an arc, then drag its diamond handle to change the bulge. Drag past the chord to flip the arc to the other side.</p>
 </aside>
 
@@ -424,7 +424,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.24.0</div>
+<div id="version">v0.24.1</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -441,7 +441,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.24.0';
+  const APP_VERSION = '0.24.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -722,7 +722,7 @@
     c.lineWidth = s.size;
     c.stroke();
     c.restore();
-    if (s.dims && (s.shape === 'rect' || s.shape === 'oval')) drawDims(c, s);
+    if (s.dims && (s.shape === 'rect' || s.shape === 'oval' || s.shape === 'arc')) drawDims(c, s);
   }
 
   // Dimension lines: width along the top edge, height down the right edge.
