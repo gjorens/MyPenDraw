@@ -201,14 +201,14 @@
   <span id="wlabel">Width</span>
   <input id="size" type="range" min="1" max="30" value="4" title="Width of the active tool">
   <span id="sizeLabel">4</span>
-  <button class="bar-btn" data-drawer="import" id="importBtn" title="Import pictures">📥<span class="cap">Import</span></button>
-  <button class="bar-btn" id="saveBtn" title="Save PNG">💾<span class="cap">Save</span></button>
+  <button class="bar-btn" data-drawer="import" id="importBtn" title="Pictures and projects">📁<span class="cap">Files</span></button>
+  <button class="bar-btn" id="saveBtn" title="Save drawing as PNG">💾<span class="cap">Save PNG</span></button>
   <button class="bar-btn" id="copyBtn" title="Copy drawing as PNG to clipboard">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
     </svg>
-    <span class="cap">PNG</span>
+    <span class="cap">Copy PNG</span>
   </button>
   <span class="bar-spacer"></span>
   <button class="bar-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
@@ -263,7 +263,7 @@
 
 <!-- Import drawer: bring in pictures from Files, Photos, or the clipboard -->
 <aside class="drawer" id="drawer-import" aria-label="Import pictures">
-  <h3>Import <button class="close" data-close aria-label="Close">✕</button></h3>
+  <h3>Files <button class="close" data-close aria-label="Close">✕</button></h3>
   <div class="sub">Add a picture</div>
   <button id="chooseFile" class="opt-btn">📂 Choose file</button>
   <button id="pasteImg" class="opt-btn">📋 Paste picture</button>
@@ -272,6 +272,11 @@
   <p id="importMsg" class="hint" role="alert"></p>
   <p class="hint">Supported: SVG, PNG, JPEG, WebP and GIF (first frame only). Up to 10 MB per file. Pictures go on the active layer, and you can then move, resize and rotate them.</p>
   <p class="hint">SVG files stay sharp when enlarged. Once placed, an imported picture is a single object. Its parts can't be selected separately.</p>
+  <div class="sub">Project</div>
+  <button id="saveProjectBtn" class="opt-btn">💾 Save project</button>
+  <button id="openProjectBtn" class="opt-btn">📂 Open project</button>
+  <input id="projectInput" type="file" hidden accept=".pendraw,application/json">
+  <p class="hint">A project keeps every layer, object, text and picture, so you can reopen it later or on another device. Saving opens the share sheet, where you can choose Save to Files or iCloud Drive.</p>
 </aside>
 
 <!-- Text drawer: type words, then tap the canvas to place them -->
@@ -321,13 +326,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.14.0</div>
+<div id="version">v0.15.0</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.14.0';
+  const APP_VERSION = '0.15.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1538,6 +1543,138 @@
   $('cutBtn').onclick = cutSelected;
   $('copyObjBtn').onclick = copySelected;
   $('pasteBtn').onclick = pasteClipboard;
+
+  // ---------- save and open projects ----------
+  // A project file (.pendraw) is JSON that holds every layer and object. Pictures are
+  // stored inside it as PNG data, so the file opens on any device with the app.
+  const PROJECT_MAX_BYTES = 50 * 1024 * 1024;
+  const PROJECT_MAX_ITEMS = 5000;
+
+  function projectData() {
+    const items = strokes.map(s => (s.image
+      ? { ...s, image: undefined, imageData: s.image.toDataURL('image/png') }
+      : s));
+    return { format: 'pen-draw', version: 1, app: APP_VERSION, layers, layerSeq, activeLayer, items };
+  }
+
+  function downloadFile(file) {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function saveProject() {
+    setImportMsg('Saving…');
+    try {
+      const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-');
+      const name = `drawing-${stamp}.pendraw`;
+      const file = new File([JSON.stringify(projectData())], name, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Pen Draw project' });
+          setImportMsg('Project saved.');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') { setImportMsg(''); return; }   // cancelled by the user
+        }
+      }
+      downloadFile(file);
+      setImportMsg('Project downloaded. Move it to Files if you want it elsewhere.');
+    } catch (err) {
+      setImportMsg('Could not save the project.');
+    }
+  }
+
+  function loadDataUrl(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        resolve(c);
+      };
+      img.onerror = () => reject(new Error('bad picture'));
+      img.src = url;
+    });
+  }
+
+  function validItem(s) {
+    if (s.fill) return Number.isFinite(s.x) && Number.isFinite(s.y);
+    if (s.image) return !!s.image;
+    if (s.kind === 'text') return typeof s.text === 'string';
+    return Array.isArray(s.points) && s.points.length > 0 &&
+      s.points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+  }
+
+  async function openProject(file) {
+    if (file.size > PROJECT_MAX_BYTES) { setImportMsg('That project is larger than 50 MB.'); return; }
+    let data;
+    try { data = JSON.parse(await file.text()); }
+    catch (err) { data = null; }
+    if (!data || data.format !== 'pen-draw' || !Array.isArray(data.layers) || !Array.isArray(data.items)) {
+      setImportMsg('That file is not a Pen Draw project.');
+      return;
+    }
+    if (data.items.length > PROJECT_MAX_ITEMS) { setImportMsg('That project has too many objects to open.'); return; }
+    if (strokes.length && !confirm('Replace the current drawing with this project? You can undo this.')) return;
+
+    try {
+      const newLayers = data.layers
+        .filter(l => l && typeof l.id === 'string')
+        .map(l => ({
+          id: l.id,
+          name: String(l.name || 'Layer').slice(0, 30),
+          visible: l.visible !== false,
+          opacity: Number.isFinite(Number(l.opacity)) ? Math.min(1, Math.max(0, Number(l.opacity))) : 1
+        }));
+      if (!newLayers.length) throw new Error('no layers');
+      const ids = new Set(newLayers.map(l => l.id));
+
+      const items = [];
+      for (const raw of data.items) {
+        if (!raw || typeof raw !== 'object') continue;
+        const s = { ...raw };
+        delete s.imageData;
+        if (raw.imageData) s.image = await loadDataUrl(raw.imageData);
+        if (!ids.has(s.layer)) s.layer = newLayers[0].id;
+        if (validItem(s)) items.push(s);
+      }
+
+      pushHistory(snapshot());
+      endTextEdit();
+      layers = newLayers;
+      strokes = items;
+      activeLayer = ids.has(data.activeLayer) ? data.activeLayer : newLayers[newLayers.length - 1].id;
+      layerSeq = newLayers.reduce((m, l) => {
+        const n = parseInt(l.id.slice(1), 10);
+        return Number.isFinite(n) ? Math.max(m, n) : m;
+      }, layerSeq);
+      selected = null;
+      current = null;
+      preview = null;
+      redrawInk();
+      renderLayerList();
+      setImportMsg('');
+      showToast('Project opened');
+    } catch (err) {
+      setImportMsg('Could not open that project.');
+    }
+  }
+
+  $('saveProjectBtn').onclick = saveProject;
+  $('openProjectBtn').onclick = () => $('projectInput').click();
+  $('projectInput').addEventListener('change', e => {
+    const files = [...(e.target.files || [])];   // copy first, as with pictures
+    e.target.value = '';
+    if (files.length) openProject(files[0]);
+  });
 
   // ---------- export ----------
   // Exports visible layers on white, without the grid, selection, or preview
