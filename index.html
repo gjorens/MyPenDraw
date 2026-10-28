@@ -6,6 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Pen Draw</title>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<meta name="apple-mobile-web-app-title" content="Pen Draw">
 <style>
   :root { --bar-h: 56px; --ink: #111; }
   * { box-sizing: border-box; }
@@ -71,13 +74,13 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.2.0</div>
+<div id="version">v0.2.1</div>
 <div id="toast"></div>
 
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.2.0';
+  const APP_VERSION = '0.2.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const canvas = document.getElementById('c');
