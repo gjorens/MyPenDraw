@@ -427,7 +427,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.28.0</div>
+<div id="version">v0.28.1</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -444,7 +444,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.28.0';
+  const APP_VERSION = '0.28.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -902,6 +902,21 @@
     const f = frameOf(s), off = 22 / view.scale;
     const P = (x, y) => localToWorld(f, x, y);
     const hw = f.w / 2, hh = f.h / 2;
+    // A circle has one diameter, so it shows only that
+    if (s.shape === 'oval' && Math.abs(f.w - f.h) <= 0.01 * Math.max(f.w, f.h)) {
+      dimLine(c, P(-hw, 0), P(hw, 0), [], 'Ø ' + formatLength(f.w));
+      return;
+    }
+    if (s.shape === 'arc') {
+      // The diameter of the circle the arc lies on, through its centre
+      const g = arcCircle(s);
+      if (g) {
+        const u = g.phiA + g.theta / 2;
+        const a = { x: g.O.x + g.R * Math.cos(u), y: g.O.y + g.R * Math.sin(u) };
+        const b = { x: g.O.x - g.R * Math.cos(u), y: g.O.y - g.R * Math.sin(u) };
+        dimLine(c, a, b, [], 'Ø ' + formatLength(2 * g.R));
+      }
+    }
     dimLine(c, P(-hw, -hh - off), P(hw, -hh - off),
       [[P(-hw, -hh), P(-hw, -hh - off)], [P(hw, -hh), P(hw, -hh - off)]], formatLength(f.w));
     dimLine(c, P(hw + off, -hh), P(hw + off, hh),
