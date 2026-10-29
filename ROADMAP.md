@@ -27,6 +27,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 
 ## Ideas, not yet planned
 
+- **On hold: brush from a clipboard bitmap.** Either a sixth brush shape that stamps a copied image as its tip, or a texture the brush paints with. Needs the image stored in the project file.
 - Free painting limited to a selection. Not needed for now.
 - Printing the grid at a chosen spacing, separate from the on-screen grid.
 - Using the calibrated scale to set a default grid spacing.
