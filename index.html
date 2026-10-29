@@ -195,6 +195,7 @@
       <span class="cap">Measure</span>
     </button>
     <button class="rail-btn tool-btn" data-tool="pen" data-drawer="pen" data-hold id="penBtn" title="Pen: tap to draw, hold for pen options">✏️<span class="cap">Pen</span></button>
+    <button class="rail-btn tool-btn" data-tool="brush" data-drawer="brush" data-hold id="brushBtn" title="Brush: tap to paint, hold for brush options">🖌️<span class="cap">Brush</span></button>
     <button class="rail-btn tool-btn" data-tool="eraser" data-drawer="eraser" data-hold id="eraserBtn" title="Eraser: tap to erase, hold for eraser options">🧽<span class="cap">Eraser</span></button>
     <button class="rail-btn" data-drawer="shapes" id="shapeBtn" title="Shapes">
       <span id="shapeIcon">▭</span><span class="cap">Shapes</span>
@@ -296,6 +297,39 @@
   <div class="sub">Width <span class="width-label" id="penWidthLabel">4</span></div>
   <input id="penWidth" class="width-input" type="range" min="1" max="30" value="4">
   <p class="hint">Curve draws freehand. Line draws a straight line from where the pen goes down to where it lifts.</p>
+</aside>
+
+<!-- Brush drawer -->
+<aside class="drawer" id="drawer-brush" aria-label="Brush">
+  <h3>Brush <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Shape</div>
+  <div class="opt-row">
+    <button class="opt-btn active" data-group="brush" data-shape="round" title="Round">● Round</button>
+    <button class="opt-btn" data-group="brush" data-shape="soft" title="Soft edge">◉ Soft</button>
+    <button class="opt-btn" data-group="brush" data-shape="square" title="Square">■ Square</button>
+    <button class="opt-btn" data-group="brush" data-shape="flat" title="Flat nib at 45 degrees">▰ Flat</button>
+    <button class="opt-btn" data-group="brush" data-shape="spray" title="Spray">⁘ Spray</button>
+  </div>
+  <div class="sub">Size <span class="width-label" id="brushWidthLabel">12</span></div>
+  <input id="brushWidth" class="width-input" type="range" min="1" max="80" value="12">
+  <div class="sub">Opacity <span class="width-label" id="brushOpacityLabel">100%</span></div>
+  <input id="brushOpacity" class="width-input" type="range" min="5" max="100" value="100">
+  <div class="sub">Colour</div>
+  <div class="grid-sw">
+    <button class="swatch active" data-group="color" data-color="#111111" style="background:#111" title="Black"></button>
+    <button class="swatch" data-group="color" data-color="#e03131" style="background:#e03131" title="Red"></button>
+    <button class="swatch" data-group="color" data-color="#1c7ed6" style="background:#1c7ed6" title="Blue"></button>
+    <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
+    <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
+    <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
+    <button class="swatch custom" data-group="color" data-idx="0" title="Custom colour 1"></button>
+    <button class="swatch custom" data-group="color" data-idx="1" title="Custom colour 2"></button>
+    <button class="swatch custom" data-group="color" data-idx="2" title="Custom colour 3"></button>
+    <button class="swatch custom" data-group="color" data-idx="3" title="Custom colour 4"></button>
+    <button class="swatch custom" data-group="color" data-idx="4" title="Custom colour 5"></button>
+    <button class="swatch custom" data-group="color" data-idx="5" title="Custom colour 6"></button>
+  </div>
+  <p class="hint">With a Pencil, pressing harder makes the stroke bigger and darker. A finger or mouse paints at full size.</p>
 </aside>
 
 <!-- Shapes drawer -->
@@ -427,7 +461,7 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.28.1</div>
+<div id="version">v0.29.0</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -444,7 +478,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.28.1';
+  const APP_VERSION = '0.29.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -489,6 +523,9 @@
   let mode = 'curve';        // 'curve' | 'line' (pen only)
   let color = '#111111';
   let penSize = 4;
+  let brushSize = 12;        // brush diameter in drawing units
+  let brushShape = 'round';  // 'round' | 'soft' | 'square' | 'flat' | 'spray'
+  let brushOpacity = 100;    // percent
   let eraserSize = 24;
   let shapeFilled = false;
   let snap = false;
@@ -815,6 +852,84 @@
     c.lineJoin = 'round';
   }
 
+  // ---------- brush ----------
+  // A brush stroke is stored as its points, shape, size, opacity, colour and a random seed. It is painted as
+  // dabs spaced along the path. The same stroke always repaints the same way, so undo and reload match.
+  const TAU = Math.PI * 2;
+  const rgbaOf = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
+  function brushState(stroke) {
+    // A small seeded random generator, so the spray dots fall in the same places each time
+    let seed = (stroke.seed >>> 0) || 1;
+    const rand = () => {
+      seed = (seed + 0x6D2B79F5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    return { last: null, carry: 0, rand };
+  }
+  // A mouse or finger paints at full size and opacity. A Pencil's pressure changes both.
+  function paintDab(c, stroke, x, y, p, rand) {
+    const q = stroke.usePressure ? Math.min(1, Math.max(0, p)) : 1;
+    const d = Math.max(0.5, stroke.size * (0.3 + 0.7 * q)), r = d / 2;
+    c.save();
+    c.globalAlpha = stroke.opacity * (0.2 + 0.8 * q);
+    c.fillStyle = stroke.color;
+    c.beginPath();
+    if (stroke.brushShape === 'soft') {
+      const g = c.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, stroke.color);
+      g.addColorStop(1, rgbaOf(stroke.color, 0));
+      c.fillStyle = g;
+      c.arc(x, y, r, 0, TAU);
+    } else if (stroke.brushShape === 'square') {
+      c.rect(x - r, y - r, d, d);
+    } else if (stroke.brushShape === 'flat') {
+      // A flat nib held at 45 degrees
+      c.translate(x, y);
+      c.rotate(Math.PI / 4);
+      c.rect(-r, -d / 6, d, d / 3);
+    } else if (stroke.brushShape === 'spray') {
+      const n = Math.max(6, Math.round(d * 0.8)), dot = Math.max(0.6, d / 40);
+      for (let i = 0; i < n; i++) {
+        const ang = rand() * TAU, rr = r * Math.sqrt(rand());
+        const px = x + Math.cos(ang) * rr, py = y + Math.sin(ang) * rr;
+        c.moveTo(px + dot, py);
+        c.arc(px, py, dot, 0, TAU);
+      }
+    } else {
+      c.arc(x, y, r, 0, TAU);
+    }
+    c.fill();
+    c.restore();
+  }
+  // Paints dabs along new points, carrying on from the previous point so the spacing stays even
+  function brushFeed(c, stroke, state, pts) {
+    const step = Math.max(0.6, stroke.size * 0.12);   // spacing depends on the size, never the pressure
+    for (const pt of pts) {
+      if (!state.last) {
+        paintDab(c, stroke, pt.x, pt.y, pt.p, state.rand);
+        state.last = pt;
+        state.carry = 0;
+        continue;
+      }
+      const L = Math.hypot(pt.x - state.last.x, pt.y - state.last.y);
+      let t = step - state.carry;   // distance along this segment to the next dab
+      while (t <= L) {
+        const f = t / L;
+        paintDab(c, stroke, state.last.x + (pt.x - state.last.x) * f, state.last.y + (pt.y - state.last.y) * f,
+          state.last.p + (pt.p - state.last.p) * f, state.rand);
+        t += step;
+      }
+      state.carry = L - (t - step);
+      state.last = pt;
+    }
+  }
+  function drawBrush(c, stroke) {
+    brushFeed(c, stroke, brushState(stroke), stroke.points);
+  }
+
   // Midpoint smoothing: each curve runs between midpoints, with the real point as
   // the control, so consecutive curves join with no gaps.
   function drawSegment(c, stroke, pts, i) {
@@ -997,6 +1112,7 @@
 
   function drawStroke(c, stroke) {
     if (stroke.fill) return;                 // fills are applied to layer ink in redrawInk
+    if (stroke.brushShape) { drawBrush(c, stroke); return; }
     if (stroke.kind === 'text') { drawText(c, stroke); return; }
     if (stroke.image) { drawPicture(c, stroke); return; }
     if (stroke.shape) { drawShape(c, stroke); return; }
@@ -1656,7 +1772,7 @@
     current = {
       layer: activeLayer,
       color,
-      size: tool === 'eraser' ? eraserSize : penSize,
+      size: tool === 'eraser' ? eraserSize : tool === 'brush' ? brushSize : penSize,
       eraser: tool === 'eraser',
       straight: !isShape && mode === 'line',
       shape: isShape ? tool : null,
@@ -1665,12 +1781,24 @@
       pointerType: e.pointerType,
       points: dragging ? [pt, { ...pt }] : [raw]
     };
+    if (tool === 'brush') {
+      current.straight = false;   // the brush ignores the pen's line mode
+      current.brushShape = brushShape;
+      current.opacity = brushOpacity / 100;
+      current.seed = Math.floor(Math.random() * 0x7fffffff);
+      current.usePressure = e.pointerType === 'pen';
+    }
     if (current.straight || current.shape) {
       preview = current;
     } else {
       const lctx = layerCtx(current.layer);
       setTransform(lctx);
-      drawStroke(lctx, current);   // a tap shows as a dot
+      if (current.brushShape) {
+        current.brushState = brushState(current);
+        brushFeed(lctx, current, current.brushState, current.points);
+      } else {
+        drawStroke(lctx, current);   // a tap shows as a dot
+      }
     }
     scheduleRender(false);
   });
@@ -1716,7 +1844,8 @@
         }
       } else {
         current.points.push(pt);
-        drawSegment(lctx, current, current.points, current.points.length - 1);
+        if (current.brushShape) brushFeed(lctx, current, current.brushState, [pt]);
+        else drawSegment(lctx, current, current.points, current.points.length - 1);
       }
     }
     if (dragging) preview = current;
@@ -1750,6 +1879,7 @@
     // Dimension lines stay on the drawing only if "keep" is on
     // Dimension lines stay on the object only if "keep" is on; otherwise the object follows Dims
     const finished = { ...current };
+    delete finished.brushState;   // only the stroke's points and settings are kept
     if (current.dims && dimKeep) finished.dims = true;
     else delete finished.dims;
     strokes = [...strokes, finished];
@@ -2671,15 +2801,23 @@
   // Width sliders: pen and shapes share penSize, and the eraser has its own eraserSize.
   // Every slider is kept in step with the stored value.
   function syncSlider() {
-    for (const [id, v] of [['penWidth', penSize], ['shapeWidth', penSize], ['eraserWidth', eraserSize]]) {
+    for (const [id, v] of [['penWidth', penSize], ['shapeWidth', penSize], ['eraserWidth', eraserSize], ['brushWidth', brushSize]]) {
       $(id).value = v;
       $(id + 'Label').textContent = v;
     }
+    $('brushOpacity').value = brushOpacity;
+    $('brushOpacityLabel').textContent = brushOpacity + '%';
   }
   for (const id of ['penWidth', 'shapeWidth']) {
     $(id).addEventListener('input', e => { penSize = Number(e.target.value); syncSlider(); });
   }
   $('eraserWidth').addEventListener('input', e => { eraserSize = Number(e.target.value); syncSlider(); });
+  // Brush: size, opacity and shape. Its colour comes from the shared swatches.
+  $('brushWidth').addEventListener('input', e => { brushSize = Number(e.target.value); syncSlider(); });
+  $('brushOpacity').addEventListener('input', e => { brushOpacity = Number(e.target.value); syncSlider(); });
+  document.querySelectorAll('[data-group="brush"][data-shape]').forEach(b => {
+    b.onclick = () => { brushShape = b.dataset.shape; setGroup('brush', b); };
+  });
 
   // Highlights the active tool in the rail and in the shapes drawer
   function syncTools() {
