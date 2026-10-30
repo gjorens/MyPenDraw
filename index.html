@@ -148,7 +148,7 @@
   canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
 
   /* App icon at the top of the rail, where the rail meets the top bar; the version is overlaid on it */
-  #appIcon { position: relative; height: var(--bar-h); margin: -6px -6px 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  #appIcon { position: relative; left: 8px; height: var(--bar-h); margin: -6px -6px 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   #appIcon img { width: 56px; height: 56px; border-radius: 13px; box-shadow: 0 0 0 1px #888; display: block; }
   #version { position: absolute; right: 2px; bottom: 2px; font-size: 10px; font-weight: 700; color: #111; background: #fff; border: 1px solid #555; padding: 1px 4px; border-radius: 5px; pointer-events: none; line-height: 1.2; }
   /* Top bar groups, with thin separators between them */
@@ -386,6 +386,8 @@
   </div>
   <button id="polyCloseBtn" class="opt-btn">Close polygon</button>
   <button id="polyOpenBtn" class="opt-btn">Finish as open line</button>
+  <button class="opt-btn tool-btn" data-tool="line" id="lineBtn">╱ Line</button>
+  <button class="opt-btn tool-btn" data-tool="para" id="paraBtn">▱ Parallelogram</button>
   <button class="opt-btn tool-btn" data-tool="vp" id="vpBtn">✛ Vanishing point</button>
   <button id="vpClearBtn" class="opt-btn">Remove vanishing point</button>
   <p class="hint">Vanishing point: tap to place it, and drag it to move. Dashed guides run from it through each rectangle and polygon corner.</p>
@@ -574,7 +576,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.33.0';
+  const APP_VERSION = '0.34.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -869,6 +871,19 @@
       }
     }
     return best;
+  }
+  // Parallelogram corners for a drag from S to E: one edge at 30 degrees (along the isometric lattice),
+  // one edge vertical. S, S+u, E, E-u, where u = s(cos30, sin30) and s = (E.x - S.x) / cos30.
+  function paraCorners(S, E) {
+    const C = Math.sqrt(3) / 2;
+    const s = (E.x - S.x) / C, ux = s * C, uy = s * 0.5;
+    const h = E.y - S.y - uy;
+    return [
+      { x: S.x, y: S.y, p: 0.5 },
+      { x: S.x + ux, y: S.y + uy, p: 0.5 },
+      { x: E.x, y: E.y, p: 0.5 },
+      { x: S.x, y: S.y + h, p: 0.5 }
+    ];
   }
   // Where a polygon corner lands, from the Polygon snap setting
   function polyVertex(q) {
@@ -1456,12 +1471,13 @@
     c.lineWidth = 1 / s;
     const C = Math.sqrt(3) / 2, L = 1e5;
     c.beginPath();
-    for (const [nx, ny] of [[1, 0], [-0.5, C], [0.5, C]]) {
+    // Horizontal lines run through the lattice points too; they sit every D / (2 cos30)
+    for (const [nx, ny, sp] of [[1, 0, D], [-0.5, C, D], [0.5, C, D], [0, 1, D / (2 * C)]]) {
       const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map(([x, y]) => nx * x + ny * y);
-      const lo = Math.floor(Math.min(...corners) / D), hi = Math.ceil(Math.max(...corners) / D);
+      const lo = Math.floor(Math.min(...corners) / sp), hi = Math.ceil(Math.max(...corners) / sp);
       const tx = -ny, ty = nx;   // along each line
       for (let k = lo; k <= hi; k++) {
-        const px = nx * k * D, py = ny * k * D;
+        const px = nx * k * sp, py = ny * k * sp;
         c.moveTo(px - tx * L, py - ty * L);
         c.lineTo(px + tx * L, py + ty * L);
       }
@@ -2046,7 +2062,7 @@
 
     const raw = toWorld(e);
     const isShape = SHAPES.includes(tool);
-    const dragging = isShape || mode === 'line';   // these need a start and an end point
+    const dragging = isShape || mode === 'line' || tool === 'line' || tool === 'para';   // these need a start and an end point
 
     // Select: grab a handle to resize or rotate, or an object to move; tap empty space to deselect
     if (tool === 'select') {
@@ -2136,13 +2152,22 @@
       color,
       size: tool === 'eraser' ? eraserSize : tool === 'brush' ? brushSize : penSize,
       eraser: tool === 'eraser',
-      straight: !isShape && mode === 'line',
+      straight: !isShape && (mode === 'line' || tool === 'line'),
       shape: isShape ? tool : null,
       filled: isShape && shapeFilled,
       dims: isShape && dimLive ? true : undefined,   // dimension lines while drawing; unset follows Dims
       pointerType: e.pointerType,
       points: dragging ? [pt, { ...pt }] : [raw]
     };
+    if (tool === 'para') {
+      current.shape = 'poly';
+      current.closed = true;
+      current.para = true;   // corners are worked out from the drag; see paraCorners
+      current.filled = shapeFilled;
+      current.start = pt;
+      current.end = pt;
+      current.points = paraCorners(pt, pt);
+    }
     if (tool === 'brush') {
       current.straight = false;   // the brush ignores the pen's line mode
       current.brushShape = brushShape;
@@ -2206,6 +2231,10 @@
           current.anchorPt = pt;
         }
         current.points[1] = snap ? snapPt(pt) : pt;
+        if (current.para) {
+          current.end = current.points[1];
+          current.points = paraCorners(current.start, current.end);
+        }
         if (current.anchorPt) {
           const [a, b] = current.points;
           const cross = (b.x - a.x) * (current.anchorPt.y - a.y) - (b.y - a.y) * (current.anchorPt.x - a.x);
@@ -2252,6 +2281,9 @@
     // Dimension lines stay on the object only if "keep" is on; otherwise the object follows Dims
     const finished = { ...current };
     delete finished.brushState;   // only the stroke's points and settings are kept
+    delete finished.start;
+    delete finished.end;
+    delete finished.para;
     if (current.dims && dimKeep) finished.dims = true;
     else delete finished.dims;
     strokes = [...strokes, finished];
@@ -3364,7 +3396,7 @@
       if (name === 'colors' && colorFloating) { colorWindowShown = !colorWindowShown; syncDrawers(); return; }
       // Opening a drawer for a tool selects that tool
       if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
-      if (name === 'shapes' && !SHAPES.includes(tool) && tool !== 'poly' && tool !== 'vp') setTool('rect');
+      if (name === 'shapes' && !SHAPES.includes(tool) && !['poly', 'vp', 'line', 'para'].includes(tool)) setTool('rect');
       toggleDrawer(name);
     };
   });
