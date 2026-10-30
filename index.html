@@ -386,6 +386,9 @@
   </div>
   <button id="polyCloseBtn" class="opt-btn">Close polygon</button>
   <button id="polyOpenBtn" class="opt-btn">Finish as open line</button>
+  <button class="opt-btn tool-btn" data-tool="vp" id="vpBtn">✛ Vanishing point</button>
+  <button id="vpClearBtn" class="opt-btn">Remove vanishing point</button>
+  <p class="hint">Vanishing point: tap to place it, and drag it to move. Dashed guides run from it through each rectangle and polygon corner.</p>
   <div class="sub">Fill</div>
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
   <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
@@ -432,6 +435,11 @@
   <div class="opt-row">
     <button id="unitInBtn" class="opt-btn">Inches</button>
     <button id="unitCmBtn" class="opt-btn">Centimetres</button>
+  </div>
+  <div class="sub">Style</div>
+  <div class="opt-row">
+    <button class="opt-btn" data-gridstyle="square">Square</button>
+    <button class="opt-btn" data-gridstyle="iso">Isometric</button>
   </div>
   <div class="sub">Spacing</div>
   <div class="stepper">
@@ -566,7 +574,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.32.2';
+  const APP_VERSION = '0.33.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -625,7 +633,10 @@
   let eraserSize = 24;
   let shapeFilled = false;
   let snap = false;
-  let GRID = 48;             // grid spacing and snap step, in drawing units (set from the Grid drawer)
+  let GRID = 48;
+  let gridStyle = 'square';   // 'square' or 'iso' (isometric lattice)
+  let vanish = null;          // vanishing point, in drawing units; guides run from it through each corner
+  let vpDrag = false;         // dragging the vanishing point             // grid spacing and snap step, in drawing units (set from the Grid drawer)
   let penInUse = false;      // once the Pencil is used, finger touches are ignored for drawing
   let activePointerId = null;
   let view = { scale: 1, ox: 0, oy: 0 };  // zoom and pan, in CSS pixels
@@ -690,7 +701,26 @@
   }
   const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   const box = (a, b) => ({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
-  const snapPt = p => ({ ...p, x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID });
+  // Isometric lattice: vertical lines at x = iD, and two families at 60 degrees to them, all spaced D apart.
+  // Their meeting points are at x = iD and y = (kD + iD/2) / cos30. Snapping picks the nearest one.
+  function isoSnap(x, y) {
+    const D = GRID, C = Math.sqrt(3) / 2;
+    const i0 = Math.round(x / D);
+    let best = null, bd = Infinity;
+    for (const i of [i0 - 1, i0, i0 + 1]) {
+      const k = Math.round((C * y) / D - 0.5 * i);
+      for (const kk of [k - 1, k, k + 1]) {
+        const px = i * D, py = (kk * D + 0.5 * i * D) / C;
+        const d = Math.hypot(px - x, py - y);
+        if (d < bd) { bd = d; best = { x: px, y: py }; }
+      }
+    }
+    return best;
+  }
+  const snapPt = p => {
+    if (gridStyle === 'iso') { const q = isoSnap(p.x, p.y); return { ...p, x: q.x, y: q.y }; }
+    return { ...p, x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID };
+  };
 
   // Picture helpers: local (unrotated) offsets to world points, and back
   function localToWorld(s, lx, ly) {
@@ -1400,6 +1430,7 @@
 
   // Draws the grid into the grid layer's canvas, at the current zoom and spacing
   function drawGrid(c) {
+    if (gridStyle === 'iso') { drawIsoGrid(c); return; }
     const d = dpr(), s = view.scale;
     const w = canvas.width / d, h = canvas.height / d;   // the canvas size, so the export can be larger
     const x0 = -view.ox / s, x1 = (w - view.ox) / s;
@@ -1411,6 +1442,66 @@
     for (let x = Math.floor(x0 / GRID) * GRID; x <= x1; x += GRID) { c.moveTo(x, y0); c.lineTo(x, y1); }
     for (let y = Math.floor(y0 / GRID) * GRID; y <= y1; y += GRID) { c.moveTo(x0, y); c.lineTo(x1, y); }
     c.stroke();
+  }
+
+  // Isometric grid: three families of lines, each a set of parallel lines spaced GRID apart.
+  // The unit normals of the families are vertical (1, 0) and (-1/2, √3/2) and (1/2, √3/2).
+  function drawIsoGrid(c) {
+    const d = dpr(), s = view.scale, D = GRID;
+    const w = canvas.width / d, h = canvas.height / d;
+    const x0 = -view.ox / s, x1 = (w - view.ox) / s;
+    const y0 = -view.oy / s, y1 = (h - view.oy) / s;
+    c.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
+    c.strokeStyle = '#c9d3df';
+    c.lineWidth = 1 / s;
+    const C = Math.sqrt(3) / 2, L = 1e5;
+    c.beginPath();
+    for (const [nx, ny] of [[1, 0], [-0.5, C], [0.5, C]]) {
+      const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map(([x, y]) => nx * x + ny * y);
+      const lo = Math.floor(Math.min(...corners) / D), hi = Math.ceil(Math.max(...corners) / D);
+      const tx = -ny, ty = nx;   // along each line
+      for (let k = lo; k <= hi; k++) {
+        const px = nx * k * D, py = ny * k * D;
+        c.moveTo(px - tx * L, py - ty * L);
+        c.lineTo(px + tx * L, py + ty * L);
+      }
+    }
+    c.stroke();
+  }
+
+  // Dashed guide lines from the vanishing point through each corner (rectangles, polygons, and a polygon in progress)
+  function drawVpGuides(c) {
+    if (!vanish) return;
+    const k = view.scale;
+    const corners = [];
+    for (const s of strokes) {
+      const L = layers.find(l => l.id === s.layer);
+      if (!L || !L.visible) continue;
+      if (s.shape === 'poly') corners.push(...s.points);
+      else if (s.shape === 'rect') corners.push(...pictureCorners(frameOf(s)));
+    }
+    if (polyDraft) corners.push(...polyDraft.points);
+    c.save();
+    c.strokeStyle = 'rgba(26,61,156,0.5)';
+    c.lineWidth = 1 / k;
+    c.setLineDash([6 / k, 6 / k]);
+    c.beginPath();
+    for (const P of corners) {
+      const dx = P.x - vanish.x, dy = P.y - vanish.y, len = Math.hypot(dx, dy);
+      if (len < 1) continue;
+      const far = 1e5 / len;
+      c.moveTo(vanish.x, vanish.y);
+      c.lineTo(vanish.x + dx * far, vanish.y + dy * far);
+    }
+    c.stroke();
+    c.setLineDash([]);
+    c.lineWidth = 1.5 / k;
+    c.beginPath();
+    c.arc(vanish.x, vanish.y, 6 / k, 0, Math.PI * 2);
+    c.moveTo(vanish.x - 12 / k, vanish.y); c.lineTo(vanish.x + 12 / k, vanish.y);
+    c.moveTo(vanish.x, vanish.y - 12 / k); c.lineTo(vanish.x, vanish.y + 12 / k);
+    c.stroke();
+    c.restore();
   }
 
   // Selection outline plus handles, drawn in world space at screen-sized scale.
@@ -1519,7 +1610,7 @@
   // The grid layer is generated for the current view, so it is rebuilt whenever the view,
   // spacing or canvas size changes, even during a plain re-composite.
   let gridKey = '';
-  const gridViewKey = () => [view.scale, view.ox, view.oy, GRID, canvas.width, canvas.height].join(',');
+  const gridViewKey = () => [view.scale, view.ox, view.oy, GRID, gridStyle, canvas.width, canvas.height].join(',');
   function refreshGridLayer() {
     if (!layers.some(l => l.id === 'GRID' && l.grid)) return;
     const key = gridViewKey();
@@ -1584,6 +1675,7 @@
         : preview;
       drawStroke(ctx, p);
     }
+    drawVpGuides(ctx);
     if (polyDraft && polyDraft.points.length) {
       // Guide while placing a polygon: the closing line back to the start, and a ring on the start corner
       setTransform(ctx);
@@ -1981,6 +2073,20 @@
       return;
     }
 
+    // Vanishing point: tap to place it, or drag it when the tap is on it
+    if (tool === 'vp') {
+      // Only a drag holds the pointer; a tap that places the point leaves nothing pending
+      if (vanish && Math.hypot(raw.x - vanish.x, raw.y - vanish.y) * view.scale < 14) {
+        vpDrag = true;
+        activePointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+      } else {
+        vanish = { x: raw.x, y: raw.y };
+      }
+      scheduleRender(false);
+      return;
+    }
+
     // Polygon: each tap places a corner. Tapping the first corner (with three or more) closes it.
     if (tool === 'poly') {
       if (!polyDraft) polyDraft = { shape: 'poly', layer: activeLayer, color, size: penSize, filled: shapeFilled, points: [] };
@@ -2066,6 +2172,13 @@
     }
     if (gesture) return;
 
+    if (vpDrag && e.pointerId === activePointerId) {
+      const q = toWorld(e);
+      vanish = { x: q.x, y: q.y };
+      scheduleRender(false);
+      return;
+    }
+
     if (measure && e.pointerId === activePointerId) {
       const q = toWorld(e);
       measure.b = measurePoint(q);
@@ -2113,6 +2226,7 @@
       touches.delete(e.pointerId);
       if (touches.size < 2) gesture = null;
     }
+    if (vpDrag) { vpDrag = false; activePointerId = null; scheduleRender(false); return; }
     if (measure && e.pointerId === activePointerId) {
       activePointerId = null;
       showToast('Distance ' + formatMeasure(Math.hypot(measure.b.x - measure.a.x, measure.b.y - measure.a.y)));
@@ -2597,7 +2711,7 @@
       : s));
     return {
       format: 'pen-draw', version: 1, app: APP_VERSION, layers, layerSeq, activeLayer, items,
-      grid: { unit: gridUnit, inches: gridIn, cm: gridCm },
+      grid: { unit: gridUnit, inches: gridIn, cm: gridCm, style: gridStyle },
       dimsAll
     };
   }
@@ -2702,6 +2816,7 @@
     measure = null;
     measures = [];
     polyDraft = null;
+    vanish = null;
     openDrawer = null;
     syncDrawers();
     redrawInk();
@@ -2767,6 +2882,7 @@
       dimsAll = !!data.dimsAll;
       if (data.grid) {
         gridUnit = data.grid.unit === 'cm' ? 'cm' : 'in';
+        gridStyle = data.grid.style === 'iso' ? 'iso' : 'square';
         gridIn = Math.min(4, Math.max(0.125, Number(data.grid.inches) || 0.5));
         gridCm = Math.min(10, Math.max(0.5, Number(data.grid.cm) || 1));
         updateGrid();
@@ -2950,6 +3066,7 @@
 
   function syncGridDrawer() {
     $('gridValue').textContent = gridLabel();
+    document.querySelectorAll('[data-gridstyle]').forEach(b => b.classList.toggle('active', b.dataset.gridstyle === gridStyle));
     $('unitInBtn').classList.toggle('active', gridUnit === 'in');
     $('unitCmBtn').classList.toggle('active', gridUnit === 'cm');
     $('gridShowBtn').textContent = gridOn() ? '▦ Show grid: On' : '▦ Show grid: Off';
@@ -3203,6 +3320,7 @@
     endTextEdit();
     if (t !== 'measure') measure = null;   // a measurement stays only while the measure tool is in use
     if (t !== 'poly') cancelPoly();
+    if (t !== 'vp') vpDrag = false;
     tool = t;
     if (t !== 'select') selected = null;
     syncTools();
@@ -3246,7 +3364,7 @@
       if (name === 'colors' && colorFloating) { colorWindowShown = !colorWindowShown; syncDrawers(); return; }
       // Opening a drawer for a tool selects that tool
       if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
-      if (name === 'shapes' && !SHAPES.includes(tool) && tool !== 'poly') setTool('rect');
+      if (name === 'shapes' && !SHAPES.includes(tool) && tool !== 'poly' && tool !== 'vp') setTool('rect');
       toggleDrawer(name);
     };
   });
@@ -3431,6 +3549,7 @@
   document.querySelector('[data-polysnap="grid"]').classList.add('active');
   $('polyCloseBtn').onclick = () => finishPoly(true);
   $('polyOpenBtn').onclick = () => finishPoly(false);
+  $('vpClearBtn').onclick = () => { vanish = null; vpDrag = false; scheduleRender(false); };
   $('solidBtn').onclick = e => {
     shapeFilled = !shapeFilled;
     e.currentTarget.textContent = shapeFilled ? '■ Solid fill: On' : '■ Solid fill: Off';
@@ -3441,6 +3560,9 @@
   $('gridShowBtn').onclick = toggleGridLayer;
   $('gridUp').onclick = () => stepGrid(1);
   $('gridDown').onclick = () => stepGrid(-1);
+  document.querySelectorAll('[data-gridstyle]').forEach(b => {
+    b.onclick = () => { gridStyle = b.dataset.gridstyle; syncGridDrawer(); scheduleRender(true); };
+  });
   $('unitInBtn').onclick = () => { gridUnit = 'in'; updateGrid(); syncGridDrawer(); scheduleRender(true); };
   $('unitCmBtn').onclick = () => { gridUnit = 'cm'; updateGrid(); syncGridDrawer(); scheduleRender(true); };
   $('snapBtn').onclick = () => { snap = !snap; syncGridDrawer(); };

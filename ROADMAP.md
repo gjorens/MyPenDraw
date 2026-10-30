@@ -11,7 +11,8 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Brush: round, soft, square, flat and spray shapes, with size, opacity, colour and Pencil pressure (harder means bigger and darker). Brush strokes are undoable but not editable. The shapes wrap three across, and a sample box shows the current brush (v0.31.3).
 - Fill, text (font, size, colour, bold), and pictures (SVG, PNG, JPEG, WebP, GIF)
 - Select, move, resize, rotate, cut, copy, paste, delete
-- Grid: inches or centimetres, snap to grid, spacing changeable at any time. A tap on the Grid button shows or hides the grid; holding it opens the Grid drawer (v0.31.4). Keeps its true spacing after a saved calibration is loaded (v0.31.1)
+- Grid: square or isometric style, inches or centimetres, snap to grid, spacing changeable at any time. Isometric snapping picks the nearest lattice point (v0.33.0).
+- Vanishing point: one point, placed by tapping and moved by dragging. Dashed guides run from it through each rectangle and polygon corner. Removed with Remove vanishing point (v0.33.0). A tap on the Grid button shows or hides the grid; holding it opens the Grid drawer (v0.31.4). Keeps its true spacing after a saved calibration is loaded (v0.31.1)
 - Measure: hold for a drawer with Snap to (Grid, Nearest line or None), Sticky readings that stay until Erase All, and Inches or Centimetres. Nearest line snaps to pen, brush, rectangle and oval outlines, not arcs, triangles, text or pictures. Changing units relabels sticky readings at once (v0.31.2, v0.31.5)
 - Scale calibration with an on-screen 150 mm ruler and a credit card, in Settings (gear in the top bar). The grid and dimension lines need a calibrated scale: turning either on starts calibration first, then turns it on (v0.31.9)
 - Project save and open (.pendraw), New project with Cancel / Delete / Save
@@ -42,3 +43,4 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Scale is saved on this device only, until scale-in-project is added.
 - Dimension lines can only be turned on before drawing a rectangle or oval.
 - Measurements are not saved with the drawing, only the visibility of their layer.
+- The vanishing point and its guides are not saved with the drawing.
