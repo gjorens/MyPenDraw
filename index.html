@@ -47,10 +47,13 @@
   .circle-btn:disabled { opacity: 0.35; }
   .circle-btn:active { background: #e6e6e6; }
   /* Brush shapes: a strip that shows three across and scrolls sideways for the rest */
-  .shape-strip { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
-  .shape-strip .opt-btn { flex: 0 0 calc((100% - 16px) / 3); min-width: 0; scroll-snap-align: start; }
-  .shape-btn { display: flex !important; flex-direction: column; align-items: center; gap: 2px; font-size: 13px; padding: 8px 2px; }
-  .shape-btn .shape-ico { font-size: 20px; line-height: 1; }
+  /* Brush shapes: three across, wrapping onto as many rows as needed */
+  .shape-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .shape-grid .opt-btn { margin: 0; min-width: 0; }
+  .shape-btn { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 14px; padding: 10px 4px; min-height: 76px; }
+  .shape-btn .shape-ico { font-size: 26px; line-height: 1; }
+  /* Sample box: a short stroke in the current brush settings */
+  .brush-sample { display: block; width: 100%; height: 96px; background: #ffffff; border: 2px solid #b8b8b8; border-radius: 10px; margin: 6px 0 12px; touch-action: none; }
   .width-input { -webkit-appearance: none; appearance: none; width: 100%; height: 34px; background: transparent; margin: 4px 0 10px; }
   .width-input::-webkit-slider-runnable-track { height: 8px; background: #4a4a4a; border-radius: 4px; }
   .width-input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1.5px #000; }
@@ -325,7 +328,7 @@
 <aside class="drawer" id="drawer-brush" aria-label="Brush">
   <h3>Brush <button class="close" data-close aria-label="Close">✕</button></h3>
   <div class="sub">Shape</div>
-  <div class="opt-row shape-strip">
+  <div class="shape-grid">
     <button class="opt-btn shape-btn active" data-group="brush" data-shape="round" title="Round"><span class="shape-ico">●</span>Round</button>
     <button class="opt-btn shape-btn" data-group="brush" data-shape="soft" title="Soft edge"><span class="shape-ico">◉</span>Soft</button>
     <button class="opt-btn shape-btn" data-group="brush" data-shape="square" title="Square"><span class="shape-ico">■</span>Square</button>
@@ -351,6 +354,8 @@
     <button class="swatch custom" data-group="color" data-idx="4" title="Custom colour 5"></button>
     <button class="swatch custom" data-group="color" data-idx="5" title="Custom colour 6"></button>
   </div>
+  <div class="sub">Sample</div>
+  <canvas id="brushSample" class="brush-sample" aria-label="Sample of the selected brush"></canvas>
   <p class="hint">With a Pencil, pressing harder makes the stroke bigger and darker. A finger or mouse paints at full size.</p>
 </aside>
 
@@ -527,7 +532,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.2';
+  const APP_VERSION = '0.31.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2918,6 +2923,7 @@
     }
     $('brushOpacity').value = brushOpacity;
     $('brushOpacityLabel').textContent = brushOpacity + '%';
+    drawBrushSample();
   }
   for (const id of ['penWidth', 'shapeWidth']) {
     $(id).addEventListener('input', e => { penSize = Number(e.target.value); syncSlider(); });
@@ -2927,8 +2933,34 @@
   $('brushWidth').addEventListener('input', e => { brushSize = Number(e.target.value); syncSlider(); });
   $('brushOpacity').addEventListener('input', e => { brushOpacity = Number(e.target.value); syncSlider(); });
   document.querySelectorAll('[data-group="brush"][data-shape]').forEach(b => {
-    b.onclick = () => { brushShape = b.dataset.shape; setGroup('brush', b); };
+    b.onclick = () => { brushShape = b.dataset.shape; setGroup('brush', b); drawBrushSample(); };
   });
+
+  // Sample box: a short stroke made with the current brush shape, size, opacity and colour.
+  // A very large brush is shrunk to fit the box, so the sample always shows the whole shape.
+  function drawBrushSample() {
+    const cv = $('brushSample');
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (!W || !H) return;   // the drawer is hidden; the box is drawn when it opens
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+      cv.width = Math.round(W * dpr);
+      cv.height = Math.round(H * dpr);
+    }
+    const c = cv.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.fillStyle = '#ffffff';
+    c.fillRect(0, 0, W, H);
+    const amp = H * 0.12;   // wave height; the brush must fit above and below it
+    const k = Math.min(1, (H - 4 - 2 * amp) / brushSize);
+    const pts = [];
+    for (let i = 0; i <= 24; i++) {
+      const t = i / 24;
+      pts.push({ x: 24 + t * (W - 48), y: H / 2 + Math.sin(t * Math.PI * 2) * amp, p: 0.5 });
+    }
+    drawBrush(c, { brushShape, size: brushSize * k, opacity: brushOpacity / 100, color, seed: 4242, usePressure: false, points: pts });
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => drawBrushSample()).observe($('brushSample'));
 
   // Highlights the active tool in the rail and in the shapes drawer
   function syncTools() {
@@ -3078,6 +3110,7 @@
   // Picking any colour switches away from the eraser and select tools, since neither uses colour
   function pickColor(c, el) {
     color = c;
+    drawBrushSample();
     $('colorDot').style.background = c;
     if (selected && selected.kind === 'text' && tool === 'select') {
       editSelectedText({ color: c });   // recolour the selected text

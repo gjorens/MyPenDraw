@@ -8,7 +8,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Layers: show/hide, reorder, opacity. The grid is a special bottom layer.
 - Shapes: rectangle, oval, arc, triangle. Arcs have a bulge handle to change their depth, and a radial handle at each end to move that end round the circle (up to 350 degrees, and past the other end to a reversed arc). The centre handle turns the whole arc about its centre; tapping it locks the centre in place. With the lock on, an end handle places its end anywhere, snapping to other ends or the grid. An arc's radius is limited to 10 inches.
 - Dimension lines on rectangles, ovals, arcs and triangles: Dims shows them on all shapes, Shape dims shows them on the selected one. Circles and arcs show their diameter.
-- Brush: round, soft, square, flat and spray shapes, with size, opacity, colour and Pencil pressure (harder means bigger and darker). Brush strokes are undoable but not editable.
+- Brush: round, soft, square, flat and spray shapes, with size, opacity, colour and Pencil pressure (harder means bigger and darker). Brush strokes are undoable but not editable. The shapes wrap three across, and a sample box shows the current brush (v0.31.3).
 - Fill, text (font, size, colour, bold), and pictures (SVG, PNG, JPEG, WebP, GIF)
 - Select, move, resize, rotate, cut, copy, paste, delete
 - Grid: inches or centimetres, snap to grid, spacing changeable at any time. Keeps its true spacing after a saved calibration is loaded (v0.31.1)
