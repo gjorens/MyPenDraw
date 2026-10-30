@@ -276,6 +276,7 @@
   <div class="bar-group">
     <button class="bar-btn" id="dimSelBtn" title="Dimension lines for the selected shape" disabled>📐<span class="cap">Shape dims</span></button>
     <button class="bar-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
+    <button class="bar-btn" data-drawer="settings" id="settingsBtn" title="Settings: scale calibration">⚙️<span class="cap">Settings</span></button>
   </div>
 </header>
 
@@ -404,6 +405,16 @@
 </aside>
 
 <!-- Grid drawer: grid on or off, spacing in inches or centimetres, snapping -->
+<!-- Settings drawer (gear): scale calibration -->
+<aside class="drawer" id="drawer-settings" aria-label="Settings">
+  <h3>Settings <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Scale</div>
+  <button id="calibBtn" class="opt-btn">📏 Calibrate to a known object</button>
+  <button id="calibResetBtn" class="opt-btn" hidden>Reset scale</button>
+  <p id="scaleInfo" class="hint"></p>
+  <p class="hint">The grid and dimension lines need a calibrated scale. The first time you turn either on, you will be asked to calibrate.</p>
+</aside>
+
 <aside class="drawer" id="drawer-grid" aria-label="Grid">
   <h3>Grid <button class="close" data-close aria-label="Close">✕</button></h3>
   <button id="gridShowBtn" class="opt-btn">▦ Show grid: Off</button>
@@ -420,10 +431,6 @@
   </div>
   <div class="sub">Snapping</div>
   <button id="snapBtn" class="opt-btn">⊞ Snap to grid: Off</button>
-  <div class="sub">Scale</div>
-  <button id="calibBtn" class="opt-btn">📏 Calibrate to a known object</button>
-  <button id="calibResetBtn" class="opt-btn" hidden>Reset scale</button>
-  <p id="scaleInfo" class="hint"></p>
   <p class="hint">To calibrate, tap Calibrate. A ruler appears on the screen. Lay a credit card's long edge along it, starting at zero, and type the mm mark where the card ends.</p>
 </aside>
 
@@ -549,7 +556,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.8';
+  const APP_VERSION = '0.31.9';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2115,6 +2122,7 @@
   // only need a re-composite, so they are not added to undo history.
   function updateLayer(id, patch, rebuild) {
     layers = layers.map(l => (l.id === id ? { ...l, ...patch } : l));
+    if (id === 'GRID') syncGridDrawer();   // the Grid button and drawer show the grid's state
     if (rebuild) renderLayerList();
     scheduleRender(false);
   }
@@ -2138,7 +2146,11 @@
     for (let i = layers.length - 1; i >= 0; i--) {
       const l = layers[i];
       const eye = el('button', { textContent: l.visible ? '👁' : '⊘', title: l.visible ? 'Hide layer' : 'Show layer' });
-      eye.onclick = e => { e.stopPropagation(); updateLayer(l.id, { visible: !l.visible }, true); };
+      eye.onclick = e => {
+        e.stopPropagation();
+        if (l.grid && !l.visible && needsCalibration(() => updateLayer('GRID', { visible: true }, true))) return;
+        updateLayer(l.id, { visible: !l.visible }, true);
+      };
 
       const name = el('span', { className: 'lname', textContent: l.name, title: 'Tap to select' });
       const ren = el('button', { textContent: '✎', title: 'Rename layer' });
@@ -2724,6 +2736,7 @@
   const gridLayer = () => layers.find(l => l.id === 'GRID');
   const gridOn = () => !!(gridLayer() && gridLayer().visible);
   function toggleGridLayer() {
+    if (!gridOn() && needsCalibration(toggleGridLayer)) return;
     updateLayer('GRID', { visible: !gridOn() }, true);
     syncGridDrawer();
   }
@@ -2755,11 +2768,23 @@
 
   // ---------- scale calibration ----------
   function syncScaleText() {
-    const calibrated = PX_PER_INCH !== 96 || !!scaleLabel;
+    const calibrated = isCalibrated();
     $('scaleInfo').textContent = calibrated
       ? `Scale calibrated to ${scaleLabel || 'a known length'} (${PX_PER_INCH.toFixed(1)} drawing units per inch).`
       : 'Scale not calibrated: 96 drawing units per inch. Screen size varies between iPads, so printed sizes are approximate.';
     $('calibResetBtn').hidden = !calibrated;
+  }
+  // A calibrated scale is needed before the grid or dimension lines can be shown.
+  function isCalibrated() { return PX_PER_INCH !== 96 || !!scaleLabel; }
+  // The action to run once calibration is done, if the user started calibrating for it
+  let pendingAfterCal = null;
+  // Returns true, and starts calibration, if the scale is not calibrated yet. The action runs after it is applied.
+  function needsCalibration(action) {
+    if (isCalibrated()) return false;
+    pendingAfterCal = action;
+    showToast('Calibrate the scale first');
+    startCalibration();
+    return true;
   }
   function applyScale(pxPerInch, label) {
     PX_PER_INCH = pxPerInch;
@@ -2788,7 +2813,7 @@
     scheduleRender(false);
   }
   $('calibBtn').onclick = startCalibration;
-  $('calibCancel').onclick = endCalibration;
+  $('calibCancel').onclick = () => { pendingAfterCal = null; endCalibration(); };
   $('calibApply').onclick = () => {
     const reading = parseFloat($('calibInput').value);
     if (!(reading >= 30 && reading <= 200)) { showToast('Type the mm mark where the card ends'); return; }
@@ -2797,11 +2822,20 @@
     applyScale(pxPerInch, `a credit card (ruler reading ${reading} mm)`);
     endCalibration();
     showToast('Scale calibrated');
+    const next = pendingAfterCal;
+    pendingAfterCal = null;
+    if (next) next();
   };
   $('calibInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('calibApply').click(); });
   $('calibResetBtn').onclick = () => {
     try { localStorage.removeItem('pendraw-scale'); } catch (e) {}
     applyScale(96, '');
+    // Without a calibrated scale the grid and dimension lines go off
+    updateLayer('GRID', { visible: false }, true);
+    if (dimsAll) setDimsAll(false);
+    dimLive = false;
+    dimKeep = false;
+    syncDimButtons();
     showToast('Scale reset to default');
   };
   syncScaleText();
@@ -2844,6 +2878,7 @@
   }
   // Shows or hides dimension lines on every shape. Each shape's own setting is cleared, so all follow.
   function setDimsAll(on) {
+    if (on && needsCalibration(() => setDimsAll(true))) return;
     pushHistory(snapshot());
     const i = selected ? strokes.indexOf(selected) : -1;
     dimsAll = on;
@@ -2858,6 +2893,7 @@
   // Shows or hides dimension lines on the selected shape only
   function toggleSelectedDims() {
     if (!selected || !isDimShape(selected)) return;
+    if (!showsDims(selected) && needsCalibration(toggleSelectedDims)) return;
     pushHistory(snapshot());
     const item = { ...selected, dims: !showsDims(selected) };
     strokes = strokes.map(s => (s === selected ? item : s));
@@ -3097,7 +3133,8 @@
     $('drawer-colors').classList.toggle('open', colorOn);
     $('colorBtn').classList.toggle('open', colorOn);
     if (openDrawer === 'text') syncTextDrawer();
-    if (openDrawer === 'grid') { syncGridDrawer(); syncScaleText(); }
+    if (openDrawer === 'grid') syncGridDrawer();
+    if (openDrawer === 'settings') syncScaleText();
     if (openDrawer === 'dims') syncDimButtons();
   }
 
@@ -3320,8 +3357,16 @@
   $('measureImpBtn').onclick = () => { measureMetric = false; syncMeasureUnits(); };
   $('measureMetBtn').onclick = () => { measureMetric = true; syncMeasureUnits(); };
   syncMeasureUnits();
-  $('dimLiveCheck').onchange = e => { dimLive = e.target.checked; syncDimButtons(); };
-  $('dimKeepCheck').onchange = e => { dimKeep = e.target.checked; syncDimButtons(); };
+  $('dimLiveCheck').onchange = e => {
+    if (e.target.checked && needsCalibration(() => { dimLive = true; syncDimButtons(); })) { e.target.checked = false; return; }
+    dimLive = e.target.checked;
+    syncDimButtons();
+  };
+  $('dimKeepCheck').onchange = e => {
+    if (e.target.checked && needsCalibration(() => { dimKeep = true; syncDimButtons(); })) { e.target.checked = false; return; }
+    dimKeep = e.target.checked;
+    syncDimButtons();
+  };
 
   $('resetViewBtn').onclick = () => {
     view = { scale: 1, ox: 0, oy: 0 };

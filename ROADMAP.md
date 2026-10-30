@@ -13,7 +13,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Select, move, resize, rotate, cut, copy, paste, delete
 - Grid: inches or centimetres, snap to grid, spacing changeable at any time. A tap on the Grid button shows or hides the grid; holding it opens the Grid drawer (v0.31.4). Keeps its true spacing after a saved calibration is loaded (v0.31.1)
 - Measure: hold for a drawer with Snap to (Grid, Nearest line or None), Sticky readings that stay until Erase All, and Inches or Centimetres. Nearest line snaps to pen, brush, rectangle and oval outlines, not arcs, triangles, text or pictures. Changing units relabels sticky readings at once (v0.31.2, v0.31.5)
-- Scale calibration with an on-screen 150 mm ruler and a credit card
+- Scale calibration with an on-screen 150 mm ruler and a credit card, in Settings (gear in the top bar). The grid and dimension lines need a calibrated scale: turning either on starts calibration first, then turns it on (v0.31.9)
 - Project save and open (.pendraw), New project with Cancel / Delete / Save
 - File menu: new, open, save as drawing, PNG or JPEG, copy PNG, and export to PDF, PNG or JPEG on US Letter at 300 dpi. Top bar grouped with separators; app icon with the version in the corner
 - Select: a Pencil or finger resting on an object doesn't move it until it has moved clearly
