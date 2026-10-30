@@ -144,11 +144,18 @@
   #stage { position: fixed; top: var(--bar-h); left: var(--rail-w); right: 0; bottom: 0; }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
 
-  #version {
-    position: fixed; right: 10px; bottom: 8px; z-index: 10;
-    font-size: 13px; font-weight: 600; color: #222; background: #fff;
-    border: 1px solid #999; padding: 3px 9px; border-radius: 6px; pointer-events: none;
-  }
+  /* App icon at the top of the rail, where the rail meets the top bar; the version is overlaid on it */
+  #appIcon { position: relative; height: var(--bar-h); margin: -6px -6px 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  #appIcon img { width: 56px; height: 56px; border-radius: 13px; box-shadow: 0 0 0 1px #888; display: block; }
+  #version { position: absolute; right: 2px; bottom: 2px; font-size: 10px; font-weight: 700; color: #111; background: #fff; border: 1px solid #555; padding: 1px 4px; border-radius: 5px; pointer-events: none; line-height: 1.2; }
+  /* Top bar groups, with thin separators between them */
+  .bar-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .bar-sep { width: 1px; height: 36px; background: #b8b8b8; flex-shrink: 0; }
+  /* File drawer: sub-menus open inline */
+  .menu-toggle.open { border: 2.5px solid #111; }
+  .menu-body { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 10px 16px; }
+  .menu-body[hidden] { display: none; }
+  .menu-body .opt-btn { margin-bottom: 0; font-size: 16px; justify-content: flex-start; }
   #toast {
     position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
     background: #222; color: #fff; padding: 8px 14px; border-radius: 8px;
@@ -187,6 +194,10 @@
 
 <!-- Left rail: grouped by function -->
 <nav id="rail">
+  <div id="appIcon" title="Pen Draw">
+    <img src="icon-512.png" alt="">
+    <span id="version">v0.29.3</span>
+  </div>
   <div class="group">
     <div class="glabel">Tools</div>
     <button class="rail-btn tool-btn" data-tool="select" id="selectBtn" title="Select, move, resize and rotate">↖<span class="cap">Select</span></button>
@@ -226,36 +237,40 @@
 
 </nav>
 
-<!-- Top bar: history and width -->
+<!-- Top bar: groups of commands, with thin separators between them -->
 <header id="topbar">
-  <button id="undoBtn" class="circle-btn" title="Undo" disabled aria-label="Undo">
+  <div class="bar-group">
+    <button class="bar-btn" data-drawer="file" id="fileBtn" title="File: new, open, save and export">📄<span class="cap">File</span></button>
+  </div>
+  <span class="bar-sep"></span>
+  <div class="bar-group">
+    <button id="undoBtn" class="circle-btn" title="Undo" disabled aria-label="Undo">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M4.5 13a8 8 0 1 0 2.4-6.2"></path>
       <polyline points="4 3.5 4 8 8.5 8"></polyline>
     </svg>
-  </button>
-  <button id="redoBtn" class="circle-btn" title="Redo" disabled aria-label="Redo">
+    </button>
+    <button id="redoBtn" class="circle-btn" title="Redo" disabled aria-label="Redo">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M19.5 13a8 8 0 1 1-2.4-6.2"></path>
       <polyline points="20 3.5 20 8 15.5 8"></polyline>
     </svg>
-  </button>
-  <button class="bar-btn" id="cutBtn" title="Cut selected" disabled>✂️<span class="cap">Cut</span></button>
-  <button class="bar-btn" id="copyObjBtn" title="Copy selected" disabled>⧉<span class="cap">Copy</span></button>
-  <button class="bar-btn" id="pasteBtn" title="Paste" disabled>📋<span class="cap">Paste</span></button>
-  <button class="bar-btn" id="delBtn" title="Delete selected" disabled>⌫<span class="cap">Delete</span></button>
-  <button class="bar-btn" id="dimSelBtn" title="Dimension lines for the selected shape" disabled>📐<span class="cap">Shape dims</span></button>
-  <button class="bar-btn" data-drawer="import" id="importBtn" title="Pictures and projects">📁<span class="cap">Files</span></button>
-  <button class="bar-btn" id="saveBtn" title="Save drawing as PNG">💾<span class="cap">Save PNG</span></button>
-  <button class="bar-btn" id="copyBtn" title="Copy drawing as PNG to clipboard">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-    </svg>
-    <span class="cap">Copy PNG</span>
-  </button>
+    </button>
+    <button class="bar-btn" id="cutBtn" title="Cut selected" disabled>✂️<span class="cap">Cut</span></button>
+    <button class="bar-btn" id="copyObjBtn" title="Copy selected" disabled>⧉<span class="cap">Copy</span></button>
+    <button class="bar-btn" id="pasteBtn" title="Paste" disabled>📋<span class="cap">Paste</span></button>
+    <button class="bar-btn" id="delBtn" title="Delete selected" disabled>⌫<span class="cap">Delete</span></button>
+  </div>
+  <span class="bar-sep"></span>
+  <div class="bar-group">
+    <button class="bar-btn" data-drawer="import" id="importBtn" title="Pictures">📁<span class="cap">Pictures</span></button>
+  </div>
   <span class="bar-spacer"></span>
-  <button class="bar-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
+  <span class="bar-sep"></span>
+  <div class="bar-group">
+    <button class="bar-btn" id="dimSelBtn" title="Dimension lines for the selected shape" disabled>📐<span class="cap">Shape dims</span></button>
+    <button class="bar-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
+  </div>
 </header>
 
 <!-- Colour drawer -->
@@ -388,9 +403,32 @@
   <p class="hint">Drag over ink to erase it. The eraser cuts through strokes and shapes on the active layer.</p>
 </aside>
 
-<!-- Import drawer: bring in pictures from Files, Photos, or the clipboard -->
-<aside class="drawer" id="drawer-import" aria-label="Import pictures">
-  <h3>Files <button class="close" data-close aria-label="Close">✕</button></h3>
+<!-- File drawer: new, open, save, copy and export -->
+<aside class="drawer" id="drawer-file" aria-label="File">
+  <h3>File <button class="close" data-close aria-label="Close">✕</button></h3>
+  <button id="newProjectBtn" class="opt-btn">📄 New drawing</button>
+  <button id="openProjectBtn" class="opt-btn">📂 Open drawing…</button>
+  <button class="opt-btn menu-toggle" data-menu="saveas">💾 Save as… ▾</button>
+  <div class="menu-body" id="menu-saveas" hidden>
+    <button id="saveProjectBtn" class="opt-btn">Drawing (.pendraw)</button>
+    <button id="saveBtn" class="opt-btn">PNG image</button>
+    <button id="jpegBtn" class="opt-btn">JPEG image</button>
+  </div>
+  <button id="copyBtn" class="opt-btn">⧉ Copy PNG to clipboard</button>
+  <button class="opt-btn menu-toggle" data-menu="export">⇪ Export… ▾</button>
+  <div class="menu-body" id="menu-export" hidden>
+    <button id="pdfBtn" class="opt-btn">PDF · US Letter, 300 dpi</button>
+    <button id="pngLetterBtn" class="opt-btn">PNG · US Letter, 300 dpi</button>
+    <button id="jpgLetterBtn" class="opt-btn">JPEG · US Letter, 300 dpi</button>
+  </div>
+  <p class="hint">Save as… and Export… keep the drawing as it is on screen, or lay it out on a one-page US Letter sheet at 300 dpi. The sheet starts at the top-left of the screen, and only visible layers are included.</p>
+  <p class="hint">A drawing keeps every layer, object, text and picture, so you can reopen it later or on another device. Saving opens the share sheet, where you can choose Save to Files or iCloud Drive.</p>
+  <input id="projectInput" type="file" hidden>
+</aside>
+
+<!-- Pictures drawer: bring in pictures from Files, Photos, or the clipboard -->
+<aside class="drawer" id="drawer-import" aria-label="Pictures">
+  <h3>Pictures <button class="close" data-close aria-label="Close">✕</button></h3>
   <div class="sub">Add a picture</div>
   <button id="chooseFile" class="opt-btn">📂 Choose file</button>
   <button id="pasteImg" class="opt-btn">📋 Paste picture</button>
@@ -399,15 +437,6 @@
   <p id="importMsg" class="hint" role="alert"></p>
   <p class="hint">Supported: SVG, PNG, JPEG, WebP and GIF (first frame only). Up to 10 MB per file. Pictures go on the active layer, and you can then move, resize and rotate them.</p>
   <p class="hint">SVG files stay sharp when enlarged. Once placed, an imported picture is a single object. Its parts can't be selected separately.</p>
-  <div class="sub">Project</div>
-  <button id="newProjectBtn" class="opt-btn">📄 New project</button>
-  <button id="saveProjectBtn" class="opt-btn">💾 Save project</button>
-  <button id="openProjectBtn" class="opt-btn">📂 Open project</button>
-  <div class="sub">Print</div>
-  <button id="pdfBtn" class="opt-btn">🖨 Export PDF: US Letter</button>
-  <p class="hint">Makes a one-page PDF at the drawing's real size, from the top-left of the screen. Only visible layers are included, and the grid is included when its layer is shown. Scale it to 100% when printing.</p>
-  <input id="projectInput" type="file" hidden>
-  <p class="hint">A project keeps every layer, object, text and picture, so you can reopen it later or on another device. Saving opens the share sheet, where you can choose Save to Files or iCloud Drive.</p>
 </aside>
 
 <!-- Text drawer: type words, then tap the canvas to place them -->
@@ -466,7 +495,6 @@
   <canvas id="c"></canvas>
 </div>
 
-<div id="version">v0.29.3</div>
 <div id="toast"></div>
 <!-- Three-choice dialog (Cancel / Delete / Save); native confirm() cannot show three buttons -->
 <dialog id="choiceDialog">
@@ -483,7 +511,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.29.3';
+  const APP_VERSION = '0.30.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1569,6 +1597,13 @@
   }
 
   function updateDrag(q) {
+    // A Pencil or finger can shake while it rests on an object. Movement is ignored until the pointer has
+    // moved clearly, and the move then starts from that point, so the object doesn't jump.
+    if (drag.pending) {
+      if (Math.hypot(q.x - drag.start.x, q.y - drag.start.y) * view.scale < 14) return;
+      drag.pending = false;
+      drag.start = q;
+    }
     // Only a real move counts for undo; a tap to select must not add an empty step
     if (Math.hypot(q.x - drag.start.x, q.y - drag.start.y) > 0.5 / view.scale) drag.moved = true;
     drag.last = q;
@@ -1755,11 +1790,13 @@
       const handle = handleAt(raw);
       if (selected && handle) {
         startDrag(handle.kind, selected, raw, handle);
+        if (e.pointerType !== 'mouse') drag.pending = true;
       } else {
         selected = hitItem(raw);
         if (selected) {
           activeLayer = selected.layer;
           startDrag('move', selected, raw, null);
+          if (e.pointerType !== 'mouse') drag.pending = true;
         } else {
           activePointerId = null;
         }
@@ -2782,6 +2819,23 @@
     showToast('PDF ready');
   }
   $('pdfBtn').onclick = exportPDF;
+
+  // File drawer: sub-menus open inline, and the image exports
+  document.querySelectorAll('.menu-toggle').forEach(b => {
+    b.onclick = () => {
+      const m = $('menu-' + b.dataset.menu);
+      m.hidden = !m.hidden;
+      b.classList.toggle('open', !m.hidden);
+    };
+  });
+  async function exportImage(page, type, name) {
+    const blob = await new Promise(r => page.toBlob(r, type, 0.92));
+    downloadFile(new File([blob], name, { type }));
+  }
+  const stampDay = () => new Date().toISOString().slice(0, 10);
+  $('pngLetterBtn').onclick = () => exportImage(renderLetterCanvas(), 'image/png', `drawing-letter-${stampDay()}.png`);
+  $('jpgLetterBtn').onclick = () => exportImage(renderLetterCanvas(), 'image/jpeg', `drawing-letter-${stampDay()}.jpg`);
+  $('jpegBtn').onclick = () => exportImage(exportCanvas(), 'image/jpeg', `drawing-${Date.now()}.jpg`);
 
   function savePNG() {
     exportCanvas().toBlob(blob => {

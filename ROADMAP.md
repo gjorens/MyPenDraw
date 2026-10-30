@@ -15,6 +15,8 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Dimension lines on rectangles and ovals, and a measure tool
 - Scale calibration with an on-screen 150 mm ruler and a credit card
 - Project save and open (.pendraw), New project with Cancel / Delete / Save
+- File menu: new, open, save as drawing, PNG or JPEG, copy PNG, and export to PDF, PNG or JPEG on US Letter at 300 dpi. Top bar grouped with separators; app icon with the version in the corner
+- Select: a Pencil or finger resting on an object doesn't move it until it has moved clearly
 - PNG export and PDF export at true size on US Letter (300 dpi, visible layers only)
 - Undo and redo, limited to 15 steps
 
