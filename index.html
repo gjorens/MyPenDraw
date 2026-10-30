@@ -360,17 +360,12 @@
   <p class="hint">With a Pencil, pressing harder makes the stroke bigger and darker. A finger or mouse paints at full size.</p>
 </aside>
 
-<!-- Dims drawer: when dimension lines show -->
+<!-- Dims drawer: two options for dimension lines -->
 <aside class="drawer" id="drawer-dims" aria-label="Dims">
   <h3>Dims <button class="close" data-close aria-label="Close">✕</button></h3>
-  <div class="sub">Show dimension lines</div>
-  <div class="opt-row">
-    <button class="opt-btn" data-dimmode="live">While drawing</button>
-    <button class="opt-btn" data-dimmode="always">Always</button>
-    <button class="opt-btn" data-dimmode="none">None</button>
-  </div>
-  <button id="dimKeepBtn" class="opt-btn">Keep dimensions on drawing: Off</button>
-  <p class="hint">Dimensions show the width and height of a rectangle or oval. For an arc, the width is the chord and the height is the bulge. While drawing shows them only as you draw; Keep leaves them on the drawing. Always shows them on every shape. Shape dims in the top bar turns them on or off for the selected shape.</p>
+  <label class="check"><input type="checkbox" id="dimLiveCheck"> Show dimension lines while drawing</label>
+  <label class="check"><input type="checkbox" id="dimKeepCheck"> Maintain dimension lines</label>
+  <p class="hint">The Dims button on the rail shows or hides dimension lines on all shapes. Shape dims in the top bar does the same for the selected shape.</p>
 </aside>
 
 <!-- Shapes drawer -->
@@ -554,7 +549,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.7';
+  const APP_VERSION = '0.31.8';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2831,10 +2826,8 @@
   }
 
   function syncDimButtons() {
-    const mode = dimsAll ? 'always' : dimLive ? 'live' : 'none';
-    document.querySelectorAll('[data-dimmode]').forEach(b => b.classList.toggle('active', b.dataset.dimmode === mode));
-    $('dimKeepBtn').textContent = dimKeep ? 'Keep dimensions on drawing: On' : 'Keep dimensions on drawing: Off';
-    $('dimKeepBtn').classList.toggle('active', dimKeep);
+    $('dimLiveCheck').checked = dimLive;
+    $('dimKeepCheck').checked = dimKeep;
   }
 
   // ---------- dimension lines: all shapes, or one shape ----------
@@ -3327,17 +3320,8 @@
   $('measureImpBtn').onclick = () => { measureMetric = false; syncMeasureUnits(); };
   $('measureMetBtn').onclick = () => { measureMetric = true; syncMeasureUnits(); };
   syncMeasureUnits();
-  $('dimKeepBtn').onclick = () => { dimKeep = !dimKeep; syncDimButtons(); };
-  // While drawing, Always and None. Switching to Always clears each shape's own setting, as Dims always did.
-  document.querySelectorAll('[data-dimmode]').forEach(b => {
-    b.onclick = () => {
-      const m = b.dataset.dimmode;
-      if (m === 'always') { if (!dimsAll) setDimsAll(true); dimLive = false; }
-      else if (m === 'live') { if (dimsAll) setDimsAll(false); dimLive = true; }
-      else { if (dimsAll) setDimsAll(false); dimLive = false; }
-      syncDimButtons();
-    };
-  });
+  $('dimLiveCheck').onchange = e => { dimLive = e.target.checked; syncDimButtons(); };
+  $('dimKeepCheck').onchange = e => { dimKeep = e.target.checked; syncDimButtons(); };
 
   $('resetViewBtn').onclick = () => {
     view = { scale: 1, ox: 0, oy: 0 };
