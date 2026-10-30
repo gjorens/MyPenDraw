@@ -50,6 +50,9 @@
   /* Brush shapes: three across, wrapping onto as many rows as needed */
   .shape-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .shape-grid .opt-btn { margin: 0; min-width: 0; }
+  /* Shapes drawer: two columns, so each button is half the drawer width */
+  .shape-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .shape-grid2 .opt-btn { margin: 0; min-width: 0; font-size: 14px; line-height: 1.2; padding: 8px 4px; min-height: 52px; }
   .shape-btn { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 14px; padding: 10px 4px; min-height: 76px; }
   .shape-btn .shape-ico { font-size: 26px; line-height: 1; }
   /* Sample box: a short stroke in the current brush settings */
@@ -373,23 +376,30 @@
 <aside class="drawer" id="drawer-shapes" aria-label="Shapes">
   <h3>Shapes <button class="close" data-close aria-label="Close">✕</button></h3>
   <div class="sub">Choose a shape</div>
-  <button class="opt-btn tool-btn" data-tool="rect" id="rectBtn">▭ Rectangle</button>
-  <button class="opt-btn tool-btn" data-tool="oval" id="ovalBtn">○ Oval</button>
-  <button class="opt-btn tool-btn" data-tool="arc" id="arcBtn">◠ Arc</button>
-  <button class="opt-btn tool-btn" data-tool="tri" id="triBtn">△ Triangle</button>
-  <button class="opt-btn tool-btn" data-tool="poly" id="polyBtn">⬠ Polygon</button>
+  <div class="shape-grid2">
+    <button class="opt-btn tool-btn" data-tool="rect" id="rectBtn">▭ Rectangle</button>
+    <button class="opt-btn tool-btn" data-tool="oval" id="ovalBtn">○ Oval</button>
+    <button class="opt-btn tool-btn" data-tool="line" id="shapeLineBtn">╱ Line</button>
+    <button class="opt-btn tool-btn" data-tool="tri" id="triBtn">△ Triangle</button>
+    <button class="opt-btn tool-btn" data-tool="arc" id="arcBtn">◠ Arc</button>
+    <button class="opt-btn tool-btn" data-tool="para" id="paraBtn">▱ Parallelogram</button>
+    <button class="opt-btn tool-btn" data-tool="poly" id="polyBtn">⬠ Polygon</button>
+    <button class="opt-btn tool-btn" data-tool="vp" id="vpBtn">✛ Vanishing point</button>
+  </div>
   <div class="sub">Corners snap to</div>
   <div class="opt-row">
     <button class="opt-btn" data-polysnap="grid">Grid</button>
     <button class="opt-btn" data-polysnap="line">Nearest line</button>
     <button class="opt-btn" data-polysnap="none">None</button>
   </div>
-  <button id="polyCloseBtn" class="opt-btn">Close polygon</button>
-  <button id="polyOpenBtn" class="opt-btn">Finish as open line</button>
-  <button class="opt-btn tool-btn" data-tool="line" id="lineBtn">╱ Line</button>
-  <button class="opt-btn tool-btn" data-tool="para" id="paraBtn">▱ Parallelogram</button>
-  <button class="opt-btn tool-btn" data-tool="vp" id="vpBtn">✛ Vanishing point</button>
-  <button id="vpClearBtn" class="opt-btn">Remove vanishing point</button>
+  <div class="sub">Actions</div>
+  <div class="shape-grid2">
+    <button id="polyCloseBtn" class="opt-btn">Close polygon</button>
+    <button id="polyOpenBtn" class="opt-btn">Finish as open line</button>
+    <button id="vpClearBtn" class="opt-btn">Remove vanishing point</button>
+    <span></span>
+  </div>
+  <p class="hint">Polygon: tap each corner. Tap the first corner, or Close polygon, to close it. Finish as open line leaves it open; open lines cannot be selected as a whole or filled. Undo removes the last corner while you draw.</p>
   <p class="hint">Vanishing point: tap to place it, and drag it to move. Dashed guides run from it through each rectangle and polygon corner.</p>
   <div class="sub">Fill</div>
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
@@ -446,7 +456,7 @@
   <div class="sub">Spacing</div>
   <div class="stepper">
     <button id="gridDown" class="opt-btn" title="Smaller">▼</button>
-    <span id="gridValue" class="grid-value">1/2 in</span>
+    <span id="gridValue" class="grid-value">1/4 in</span>
     <button id="gridUp" class="opt-btn" title="Larger">▲</button>
   </div>
   <div class="sub">Snapping</div>
@@ -576,7 +586,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.34.0';
+  const APP_VERSION = '0.34.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2915,7 +2925,7 @@
       if (data.grid) {
         gridUnit = data.grid.unit === 'cm' ? 'cm' : 'in';
         gridStyle = data.grid.style === 'iso' ? 'iso' : 'square';
-        gridIn = Math.min(4, Math.max(0.125, Number(data.grid.inches) || 0.5));
+        gridIn = Math.min(4, Math.max(0.125, Number(data.grid.inches) || 0.25));
         gridCm = Math.min(10, Math.max(0.5, Number(data.grid.cm) || 1));
         updateGrid();
       }
@@ -2973,7 +2983,7 @@
     }
   } catch (e) {}
   let gridUnit = 'in';      // 'in' or 'cm': used for the grid, dimensions and measurements
-  let gridIn = 0.5;         // grid spacing in inches, in steps of 1/8
+  let gridIn = 0.25;        // grid spacing in inches, in steps of 1/8
   let gridCm = 1;           // grid spacing in centimetres, in steps of 0.5
   let dimLive = false;      // dimension lines while drawing rectangles and ovals
   let dimKeep = false;      // keep those dimension lines on the drawing
