@@ -591,7 +591,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.34.2';
+  const APP_VERSION = '0.34.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -897,9 +897,19 @@
     const C = Math.sqrt(3) / 2, D = GRID, grid = polySnapMode === 'grid';
     let A;
     if (paraStyle === 'flat') {
-      let W = (E.x - S.x) - 2 * C * (E.y - S.y);   // horizontal length of the base
+      // The base runs from S towards E's side (so dragging right draws to the right). The sides lean
+      // at 30 degrees, leaning right when the drag goes down and left when it goes up.
+      const h = E.y - S.y;
+      let W = E.x - S.x;                                  // horizontal length of the base
       if (grid) { const step = gridStyle === 'iso' ? 2 * D : D; W = Math.round(W / step) * step; }
-      A = { x: S.x + W, y: S.y };
+      const top = paraSnap({ x: S.x + 2 * C * h, y: S.y + h });   // the top-left corner
+      const base = { x: S.x + W, y: S.y };
+      return [
+        { x: S.x, y: S.y, p: 0.5 },
+        { x: base.x, y: base.y, p: 0.5 },
+        { x: base.x + top.x - S.x, y: base.y + top.y - S.y, p: 0.5 },
+        { x: top.x, y: top.y, p: 0.5 }
+      ];
     } else {
       const s = (E.x - S.x) / C;
       A = paraSnap({ x: S.x + s * C, y: S.y + s * 0.5 });
