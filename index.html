@@ -385,11 +385,12 @@
     <button class="opt-btn" data-polysnap="none">None</button>
   </div>
   <button id="polyCloseBtn" class="opt-btn">Close polygon</button>
+  <button id="polyOpenBtn" class="opt-btn">Finish as open line</button>
   <div class="sub">Fill</div>
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
   <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
   <input id="shapeWidth" class="width-input" type="range" min="1" max="30" value="4">
-  <p class="hint">Polygon: tap each corner. Tap the first corner, or Close polygon, to finish. Corners follow the snap choice above.</p>
+  <p class="hint">Polygon: tap each corner. Tap the first corner, or Close polygon, to close it. Finish as open line leaves it open; open lines cannot be selected as a whole or filled. Undo removes the last corner while you draw.</p>
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved. Select an arc, then drag its diamond handle to change the bulge. Drag past the chord to flip the arc to the other side.</p>
 </aside>
 
@@ -565,7 +566,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.32.0';
+  const APP_VERSION = '0.32.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -842,15 +843,25 @@
     if (polySnapMode === 'line') return nearestLinePoint(q) || q;
     return q;
   }
-  // Finishes the polygon being placed. It needs three corners.
-  function finishPoly() {
+  // Finishes the polygon being placed: closed (three corners or more), or left open (two or more)
+  function finishPoly(closed = true) {
     if (!polyDraft) return;
-    if (polyDraft.points.length < 3) { showToast('A polygon needs three corners'); return; }
+    const need = closed ? 3 : 2;
+    if (polyDraft.points.length < need) { showToast(closed ? 'A closed polygon needs three corners' : 'An open line needs two corners'); return; }
     pushHistory(snapshot());
-    strokes = [...strokes, { ...polyDraft, closed: true }];
+    strokes = [...strokes, { ...polyDraft, closed }];
     polyDraft = null;
     preview = null;
     scheduleRender(true);
+    updateButtons();
+  }
+  // Undo while placing a polygon removes its last corner
+  function removeLastCorner() {
+    const pts = polyDraft.points.slice(0, -1);
+    if (!pts.length) { cancelPoly(); updateButtons(); return; }
+    polyDraft = { ...polyDraft, points: pts };
+    preview = polyDraft;
+    scheduleRender(false);
     updateButtons();
   }
   function cancelPoly() {
@@ -1570,6 +1581,27 @@
         : preview;
       drawStroke(ctx, p);
     }
+    if (polyDraft && polyDraft.points.length) {
+      // Guide while placing a polygon: the closing line back to the start, and a ring on the start corner
+      setTransform(ctx);
+      const k = view.scale, first = polyDraft.points[0], last = polyDraft.points[polyDraft.points.length - 1];
+      ctx.save();
+      ctx.strokeStyle = '#1a3d9c';
+      ctx.lineWidth = 1.5 / k;
+      if (polyDraft.points.length > 1) {
+        ctx.setLineDash([6 / k, 4 / k]);
+        ctx.beginPath();
+        ctx.moveTo(last.x, last.y);
+        ctx.lineTo(first.x, first.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.beginPath();
+      ctx.arc(first.x, first.y, 9 / k, 0, Math.PI * 2);
+      ctx.lineWidth = 2.5 / k;
+      ctx.stroke();
+      ctx.restore();
+    }
     if (selected) {
       setTransform(ctx);
       drawSelection(ctx);
@@ -1653,6 +1685,7 @@
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
       if (s.fill) continue;
+      if (s.shape === 'poly' && !s.closed) continue;   // an open line is not selected as a whole
       const L = layers.find(l => l.id === s.layer);
       if (!L || !L.visible) continue;
       if (isFrame(s)) {
@@ -1955,6 +1988,7 @@
         polyDraft.points = [...polyDraft.points, polyVertex(raw)];
         preview = polyDraft;
         scheduleRender(false);
+        updateButtons();
       }
       return;
     }
@@ -2141,6 +2175,7 @@
   }
 
   function undo() {
+    if (polyDraft) { removeLastCorner(); return; }
     if (!undoStack.length) return;
     redoStack.push(snapshot());
     restore(undoStack.pop());
@@ -2162,7 +2197,7 @@
 
 
   function updateButtons() {
-    $('undoBtn').disabled = undoStack.length === 0;
+    $('undoBtn').disabled = undoStack.length === 0 && !polyDraft;
     syncDimControls();
     $('redoBtn').disabled = redoStack.length === 0;
     $('delBtn').disabled = !selected;
@@ -2663,6 +2698,7 @@
     preview = null;
     measure = null;
     measures = [];
+    polyDraft = null;
     openDrawer = null;
     syncDrawers();
     redrawInk();
@@ -3390,7 +3426,8 @@
     };
   });
   document.querySelector('[data-polysnap="grid"]').classList.add('active');
-  $('polyCloseBtn').onclick = finishPoly;
+  $('polyCloseBtn').onclick = () => finishPoly(true);
+  $('polyOpenBtn').onclick = () => finishPoly(false);
   $('solidBtn').onclick = e => {
     shapeFilled = !shapeFilled;
     e.currentTarget.textContent = shapeFilled ? '■ Solid fill: On' : '■ Solid fill: Off';
