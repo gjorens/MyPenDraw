@@ -156,6 +156,8 @@
   .menu-body { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 10px 16px; }
   .menu-body[hidden] { display: none; }
   .menu-body .opt-btn { margin-bottom: 0; font-size: 16px; justify-content: flex-start; }
+  .check { display: flex; align-items: center; gap: 12px; font-size: 17px; padding: 8px 0; }
+  .check input { width: 24px; height: 24px; accent-color: var(--accent); }
   #toast {
     position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
     background: #222; color: #fff; padding: 8px 14px; border-radius: 8px;
@@ -201,7 +203,7 @@
   <div class="group">
     <div class="glabel">Tools</div>
     <button class="rail-btn tool-btn" data-tool="select" id="selectBtn" title="Select, move, resize and rotate">↖<span class="cap">Select</span></button>
-    <button class="rail-btn tool-btn" data-tool="measure" id="measureBtn" title="Measure the distance between two points">
+    <button class="rail-btn tool-btn" data-tool="measure" data-drawer="measure" data-hold id="measureBtn" title="Measure: drag to read a distance, hold for measure options">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <g transform="rotate(-45 12 12)">
           <rect x="1.5" y="9" width="21" height="6" rx="1"></rect>
@@ -371,6 +373,20 @@
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved. Select an arc, then drag its diamond handle to change the bulge. Drag past the chord to flip the arc to the other side.</p>
 </aside>
 
+<!-- Measure drawer: snapping, sticky readings, erase, and units -->
+<aside class="drawer" id="drawer-measure" aria-label="Measure">
+  <h3>Measure <button class="close" data-close aria-label="Close">✕</button></h3>
+  <label class="check"><input type="checkbox" id="measureSnap"> Snap to grid</label>
+  <label class="check"><input type="checkbox" id="measureSticky"> Sticky: keep readings on screen</label>
+  <button id="measureEraseAll" class="opt-btn">🧹 Erase All</button>
+  <div class="sub">Units</div>
+  <div class="opt-row">
+    <button id="measureImpBtn" class="opt-btn">Imperial (in)</button>
+    <button id="measureMetBtn" class="opt-btn">Metric (cm)</button>
+  </div>
+  <p class="hint">Drag across the drawing to read the distance between two points. Without Sticky, the reading stays until you switch tools. With Sticky, each reading stays until you tap Erase All.</p>
+</aside>
+
 <!-- Grid drawer: grid on or off, spacing in inches or centimetres, snapping -->
 <aside class="drawer" id="drawer-grid" aria-label="Grid">
   <h3>Grid <button class="close" data-close aria-label="Close">✕</button></h3>
@@ -511,7 +527,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.30.0';
+  const APP_VERSION = '0.31.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -549,7 +565,10 @@
   let undoStack = [], redoStack = [];
   let current = null;        // item being drawn
   let preview = null;        // line or shape being dragged out (not yet committed)
-  let measure = null;        // measurement shown on screen: {a, b} in drawing units, not saved
+  let measure = null;        // measurement being dragged or just read: {a, b} in drawing units, not saved
+  let measures = [];         // sticky readings kept on screen until Erase All
+  let measureSticky = false; // keep each reading on screen
+  let measureMetric = false; // measurement labels: false = inches, true = centimetres
   let selected = null;       // selected item
   let drag = null;           // move, resize or rotate in progress
   let tool = 'pen';          // 'select' | 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
@@ -1129,8 +1148,8 @@
   }
 
   // Measurement overlay: a line between the two points, with its length
-  function drawMeasure(c) {
-    const { a, b } = measure, k = view.scale;
+  function drawMeasure(c, m) {
+    const { a, b } = m, k = view.scale;
     const ink = '#e8590c';
     c.save();
     c.strokeStyle = ink;
@@ -1145,7 +1164,7 @@
       c.arc(p.x, p.y, 4 / k, 0, Math.PI * 2);
       c.fill();
     }
-    const text = formatLength(Math.hypot(b.x - a.x, b.y - a.y));
+    const text = formatMeasure(Math.hypot(b.x - a.x, b.y - a.y));
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 18 / k;
     c.font = `bold ${13 / k}px -apple-system, system-ui, sans-serif`;
     c.textAlign = 'center';
@@ -1437,10 +1456,9 @@
       setTransform(ctx);
       drawSelection(ctx);
     }
-    if (measure) {
-      setTransform(ctx);
-      drawMeasure(ctx);
-    }
+    setTransform(ctx);
+    for (const m of measures) drawMeasure(ctx, m);
+    if (measure) drawMeasure(ctx, measure);
     if (calibMode) drawCalibRuler(ctx);
   }
 
@@ -1925,7 +1943,9 @@
     }
     if (measure && e.pointerId === activePointerId) {
       activePointerId = null;
-      showToast('Distance ' + formatLength(Math.hypot(measure.b.x - measure.a.x, measure.b.y - measure.a.y)));
+      showToast('Distance ' + formatMeasure(Math.hypot(measure.b.x - measure.a.x, measure.b.y - measure.a.y)));
+      if (measureSticky) { measures = [...measures, measure]; measure = null; }
+      scheduleRender(false);
       return;
     }
     if (drag) {
@@ -2469,6 +2489,7 @@
     current = null;
     preview = null;
     measure = null;
+    measures = [];
     openDrawer = null;
     syncDrawers();
     redrawInk();
@@ -2623,6 +2644,11 @@
     if (gridUnit === 'cm') return (units / PX_PER_INCH * 2.54).toFixed(1) + ' cm';
     return (units / PX_PER_INCH).toFixed(2) + ' in';
   }
+  // Measurements have their own units, set in the Measure drawer
+  function formatMeasure(units) {
+    if (measureMetric) return (units / PX_PER_INCH * 2.54).toFixed(1) + ' cm';
+    return (units / PX_PER_INCH).toFixed(2) + ' in';
+  }
 
   // ---------- scale calibration ----------
   function syncScaleText() {
@@ -2693,6 +2719,7 @@
     $('gridShowBtn').classList.toggle('active', gridOn());
     $('snapBtn').textContent = snap ? '⊞ Snap to grid: On' : '⊞ Snap to grid: Off';
     $('snapBtn').classList.toggle('active', snap);
+    $('measureSnap').checked = snap;
     $('gridBtn').classList.toggle('active', gridOn());
   }
 
@@ -3139,6 +3166,24 @@
   $('unitInBtn').onclick = () => { gridUnit = 'in'; updateGrid(); syncGridDrawer(); scheduleRender(true); };
   $('unitCmBtn').onclick = () => { gridUnit = 'cm'; updateGrid(); syncGridDrawer(); scheduleRender(true); };
   $('snapBtn').onclick = () => { snap = !snap; syncGridDrawer(); };
+
+  // Measure drawer: snapping is the same setting as the grid's
+  $('measureSnap').onchange = e => { snap = e.target.checked; syncGridDrawer(); };
+  $('measureSticky').onchange = e => { measureSticky = e.target.checked; };
+  $('measureEraseAll').onclick = () => {
+    measures = [];
+    measure = null;
+    scheduleRender(false);
+    showToast('Measurements erased');
+  };
+  const syncMeasureUnits = () => {
+    $('measureImpBtn').classList.toggle('active', !measureMetric);
+    $('measureMetBtn').classList.toggle('active', measureMetric);
+    $('measureSticky').checked = measureSticky;
+  };
+  $('measureImpBtn').onclick = () => { measureMetric = false; syncMeasureUnits(); };
+  $('measureMetBtn').onclick = () => { measureMetric = true; syncMeasureUnits(); };
+  syncMeasureUnits();
   $('dimLiveBtn').onclick = () => { dimLive = !dimLive; syncDimButtons(); };
   $('dimKeepBtn').onclick = () => { dimKeep = !dimKeep; syncDimButtons(); };
 
