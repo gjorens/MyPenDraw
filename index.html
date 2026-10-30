@@ -324,8 +324,8 @@
     <button id="curveBtn" class="opt-btn active" data-group="mode" title="Smooth curves">〜 Curve</button>
     <button id="lineBtn" class="opt-btn" data-group="mode" title="Straight lines">／ Line</button>
   </div>
-  <div class="sub">Width <span class="width-label" id="penWidthLabel">4</span></div>
-  <input id="penWidth" class="width-input" type="range" min="1" max="30" value="4">
+  <div class="sub">Width <span class="width-label" id="penWidthLabel">2</span></div>
+  <input id="penWidth" class="width-input" type="range" min="1" max="30" value="2">
   <p class="hint">Curve draws freehand. Line draws a straight line from where the pen goes down to where it lifts.</p>
 </aside>
 
@@ -392,6 +392,11 @@
     <button class="opt-btn" data-polysnap="line">Nearest line</button>
     <button class="opt-btn" data-polysnap="none">None</button>
   </div>
+  <div class="sub">Parallelogram sides</div>
+  <div class="opt-row">
+    <button class="opt-btn" data-parastyle="flat">Flat base</button>
+    <button class="opt-btn" data-parastyle="vertical">Vertical sides</button>
+  </div>
   <div class="sub">Actions</div>
   <div class="shape-grid2">
     <button id="polyCloseBtn" class="opt-btn">Close polygon</button>
@@ -403,8 +408,8 @@
   <p class="hint">Vanishing point: tap to place it, and drag it to move. Dashed guides run from it through each rectangle and polygon corner.</p>
   <div class="sub">Fill</div>
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
-  <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
-  <input id="shapeWidth" class="width-input" type="range" min="1" max="30" value="4">
+  <div class="sub">Width <span class="width-label" id="shapeWidthLabel">2</span></div>
+  <input id="shapeWidth" class="width-input" type="range" min="1" max="30" value="2">
   <p class="hint">Polygon: tap each corner. Tap the first corner, or Close polygon, to close it. Finish as open line leaves it open; open lines cannot be selected as a whole or filled. Undo removes the last corner while you draw.</p>
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved. Select an arc, then drag its diamond handle to change the bulge. Drag past the chord to flip the arc to the other side.</p>
 </aside>
@@ -586,7 +591,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.34.1';
+  const APP_VERSION = '0.34.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -628,6 +633,7 @@
   let preview = null;        // line or shape being dragged out (not yet committed)
   let polyDraft = null;      // polygon being placed: its corners so far (not yet committed)
   let polySnapMode = 'grid'; // where polygon corners snap: 'grid', 'line' or 'none'
+  let paraStyle = 'flat';    // parallelogram: 'flat' (horizontal base, sides at 30 degrees) or 'vertical' (sides vertical)
   let measure = null;        // measurement being dragged or just read: {a, b} in drawing units, not saved
   let measures = [];         // sticky readings kept on screen until Erase All
   let measureSticky = false; // keep each reading on screen
@@ -638,7 +644,7 @@
   let tool = 'pen';          // 'select' | 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
   let mode = 'curve';        // 'curve' | 'line' (pen only)
   let color = '#111111';
-  let penSize = 4;
+  let penSize = 2;
   let brushSize = 12;        // brush diameter in drawing units
   let brushShape = 'round';  // 'round' | 'soft' | 'square' | 'flat' | 'spray'
   let brushOpacity = 100;    // percent
@@ -882,17 +888,28 @@
     }
     return best;
   }
-  // Parallelogram corners for a drag from S to E: one edge at 30 degrees (along the isometric lattice),
-  // one edge vertical. S, S+u, E, E-u, where u = s(cos30, sin30) and s = (E.x - S.x) / cos30.
+  // Parallelogram corners for a drag from S to E (opposite corners). The corners snap when Corners snap to is Grid.
+  // Flat base: the bottom and top are horizontal, the sides lean at 30 degrees.
+  // Vertical sides: the sides are vertical, and the other edges lean at 30 degrees.
+  // The fourth corner is always S + E - A, so the shape stays a parallelogram.
+  function paraSnap(q) { return polySnapMode === 'grid' ? snapPt(q) : q; }
   function paraCorners(S, E) {
-    const C = Math.sqrt(3) / 2;
-    const s = (E.x - S.x) / C, ux = s * C, uy = s * 0.5;
-    const h = E.y - S.y - uy;
+    const C = Math.sqrt(3) / 2, D = GRID, grid = polySnapMode === 'grid';
+    let A;
+    if (paraStyle === 'flat') {
+      let W = (E.x - S.x) - 2 * C * (E.y - S.y);   // horizontal length of the base
+      if (grid) { const step = gridStyle === 'iso' ? 2 * D : D; W = Math.round(W / step) * step; }
+      A = { x: S.x + W, y: S.y };
+    } else {
+      const s = (E.x - S.x) / C;
+      A = paraSnap({ x: S.x + s * C, y: S.y + s * 0.5 });
+    }
+    const B = { x: S.x + E.x - A.x, y: S.y + E.y - A.y };
     return [
       { x: S.x, y: S.y, p: 0.5 },
-      { x: S.x + ux, y: S.y + uy, p: 0.5 },
+      { x: A.x, y: A.y, p: 0.5 },
       { x: E.x, y: E.y, p: 0.5 },
-      { x: S.x, y: S.y + h, p: 0.5 }
+      { x: B.x, y: B.y, p: 0.5 }
     ];
   }
   // Where a polygon corner lands, from the Polygon snap setting
@@ -2174,9 +2191,9 @@
       current.closed = true;
       current.para = true;   // corners are worked out from the drag; see paraCorners
       current.filled = shapeFilled;
-      current.start = pt;
-      current.end = pt;
-      current.points = paraCorners(pt, pt);
+      current.start = paraSnap(pt);
+      current.end = current.start;
+      current.points = paraCorners(current.start, current.start);
     }
     if (tool === 'brush') {
       current.straight = false;   // the brush ignores the pen's line mode
@@ -2240,7 +2257,7 @@
             Math.hypot(pt.x - current.points[0].x, pt.y - current.points[0].y) > 4 / view.scale) {
           current.anchorPt = pt;
         }
-        current.points[1] = snap ? snapPt(pt) : pt;
+        current.points[1] = current.para ? paraSnap(pt) : (snap ? snapPt(pt) : pt);
         if (current.para) {
           current.end = current.points[1];
           current.points = paraCorners(current.start, current.end);
@@ -3589,6 +3606,13 @@
     };
   });
   document.querySelector('[data-polysnap="grid"]').classList.add('active');
+  document.querySelectorAll('[data-parastyle]').forEach(b => {
+    b.onclick = () => {
+      paraStyle = b.dataset.parastyle;
+      document.querySelectorAll('[data-parastyle]').forEach(x => x.classList.toggle('active', x === b));
+    };
+  });
+  document.querySelector('[data-parastyle="flat"]').classList.add('active');
   $('polyCloseBtn').onclick = () => finishPoly(true);
   $('polyOpenBtn').onclick = () => finishPoly(false);
   $('vpClearBtn').onclick = () => { vanish = null; vpDrag = false; scheduleRender(false); };
