@@ -12,7 +12,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Fill, text (font, size, colour, bold), and pictures (SVG, PNG, JPEG, WebP, GIF)
 - Select, move, resize, rotate, cut, copy, paste, delete
 - Grid: inches or centimetres, snap to grid, spacing changeable at any time. A tap on the Grid button shows or hides the grid; holding it opens the Grid drawer (v0.31.4). Keeps its true spacing after a saved calibration is loaded (v0.31.1)
-- Measure: hold for a drawer with Snap to grid, Sticky readings that stay until Erase All, and Imperial or Metric units. Changing units relabels sticky readings at once (v0.31.2)
+- Measure: hold for a drawer with Snap to (Grid, Nearest line or None), Sticky readings that stay until Erase All, and Inches or Centimetres. Nearest line snaps to pen, brush, rectangle and oval outlines, not arcs, triangles, text or pictures. Changing units relabels sticky readings at once (v0.31.2, v0.31.5)
 - Scale calibration with an on-screen 150 mm ruler and a credit card
 - Project save and open (.pendraw), New project with Cancel / Delete / Save
 - File menu: new, open, save as drawing, PNG or JPEG, copy PNG, and export to PDF, PNG or JPEG on US Letter at 300 dpi. Top bar grouped with separators; app icon with the version in the corner

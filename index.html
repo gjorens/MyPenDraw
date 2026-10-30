@@ -381,13 +381,18 @@
 <!-- Measure drawer: snapping, sticky readings, erase, and units -->
 <aside class="drawer" id="drawer-measure" aria-label="Measure">
   <h3>Measure <button class="close" data-close aria-label="Close">✕</button></h3>
-  <label class="check"><input type="checkbox" id="measureSnap"> Snap to grid</label>
+  <div class="sub">Snap to</div>
+  <div class="opt-row">
+    <button class="opt-btn" data-msnap="grid">Grid</button>
+    <button class="opt-btn" data-msnap="line">Nearest line</button>
+    <button class="opt-btn" data-msnap="none">None</button>
+  </div>
   <label class="check"><input type="checkbox" id="measureSticky"> Sticky: keep readings on screen</label>
   <button id="measureEraseAll" class="opt-btn">🧹 Erase All</button>
   <div class="sub">Units</div>
   <div class="opt-row">
-    <button id="measureImpBtn" class="opt-btn">Imperial (in)</button>
-    <button id="measureMetBtn" class="opt-btn">Metric (cm)</button>
+    <button id="measureImpBtn" class="opt-btn">Inches</button>
+    <button id="measureMetBtn" class="opt-btn">Centimetres</button>
   </div>
   <p class="hint">Drag across the drawing to read the distance between two points. Without Sticky, the reading stays until you switch tools. With Sticky, each reading stays until you tap Erase All.</p>
 </aside>
@@ -532,7 +537,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.4';
+  const APP_VERSION = '0.31.5';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -574,6 +579,7 @@
   let measures = [];         // sticky readings kept on screen until Erase All
   let measureSticky = false; // keep each reading on screen
   let measureMetric = false; // measurement labels: false = inches, true = centimetres
+  let measureSnapMode = 'none'; // how measure endpoints snap: 'grid', 'line' (nearest line) or 'none'
   let selected = null;       // selected item
   let drag = null;           // move, resize or rotate in progress
   let tool = 'pen';          // 'select' | 'pen' | 'eraser' | 'rect' | 'oval' | 'arc' | 'fill'
@@ -762,6 +768,45 @@
   }
 
   // Snap for a dragged arc end: another object's end point first, then the grid when snapping is on
+  // Nearest line: the closest point on a visible pen or brush stroke, rectangle or oval outline,
+  // within 12 screen pixels. Arcs, triangles, text and pictures are not included. Null if none is close.
+  function nearestLinePoint(q) {
+    const tol = 12 / view.scale;
+    let best = null, bestD = tol;
+    const consider = (ax, ay, bx, by) => {
+      const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      const t = L2 ? Math.max(0, Math.min(1, ((q.x - ax) * dx + (q.y - ay) * dy) / L2)) : 0;
+      const px = ax + t * dx, py = ay + t * dy, d = Math.hypot(px - q.x, py - q.y);
+      if (d <= bestD) { bestD = d; best = { x: px, y: py }; }
+    };
+    for (const s of strokes) {
+      if (s.image || s.kind === 'text' || s.shape === 'arc' || s.shape === 'tri' || !s.points || !s.points.length) continue;
+      const L = layers.find(l => l.id === s.layer);
+      if (!L || !L.visible) continue;
+      if (s.shape === 'rect' || s.shape === 'oval') {
+        const f = frameOf(s), c = Math.cos(f.rot), sn = Math.sin(f.rot);
+        const toW = (x, y) => ({ x: f.cx + x * c - y * sn, y: f.cy + x * sn + y * c });
+        if (s.shape === 'rect') {
+          const k = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => toW(x * f.w / 2, y * f.h / 2));
+          for (let i = 0; i < 4; i++) consider(k[i].x, k[i].y, k[(i + 1) % 4].x, k[(i + 1) % 4].y);
+        } else {
+          const N = 72, ring = [];
+          for (let i = 0; i <= N; i++) { const a = i / N * Math.PI * 2; ring.push(toW(Math.cos(a) * f.w / 2, Math.sin(a) * f.h / 2)); }
+          for (let i = 0; i < N; i++) consider(ring[i].x, ring[i].y, ring[i + 1].x, ring[i + 1].y);
+        }
+      } else {
+        for (let i = 0; i + 1 < s.points.length; i++) consider(s.points[i].x, s.points[i].y, s.points[i + 1].x, s.points[i + 1].y);
+      }
+    }
+    return best;
+  }
+  // Where a measure endpoint lands, from the Snap to setting in the Measure drawer
+  function measurePoint(q) {
+    if (measureSnapMode === 'grid') return snapPt(q);
+    if (measureSnapMode === 'line') return nearestLinePoint(q) || q;
+    return q;
+  }
+
   function snapEnd(q, skip) {
     const tol = 12 / view.scale;
     let best = null, bestD = tol;
@@ -1832,7 +1877,7 @@
 
     // Measure: drag from one point to another to read the distance
     if (tool === 'measure') {
-      const p = snap ? snapPt(raw) : raw;
+      const p = measurePoint(raw);
       measure = { a: p, b: p };
       activePointerId = e.pointerId;
       canvas.setPointerCapture(e.pointerId);
@@ -1901,7 +1946,7 @@
 
     if (measure && e.pointerId === activePointerId) {
       const q = toWorld(e);
-      measure.b = snap ? snapPt(q) : q;
+      measure.b = measurePoint(q);
       scheduleRender(false);
       return;
     }
@@ -2725,7 +2770,6 @@
     $('gridShowBtn').classList.toggle('active', gridOn());
     $('snapBtn').textContent = snap ? '⊞ Snap to grid: On' : '⊞ Snap to grid: Off';
     $('snapBtn').classList.toggle('active', snap);
-    $('measureSnap').checked = snap;
     $('gridBtn').classList.toggle('active', gridOn());
   }
 
@@ -3204,7 +3248,11 @@
   $('snapBtn').onclick = () => { snap = !snap; syncGridDrawer(); };
 
   // Measure drawer: snapping is the same setting as the grid's
-  $('measureSnap').onchange = e => { snap = e.target.checked; syncGridDrawer(); };
+  const syncMeasureSnap = () => {
+    document.querySelectorAll('[data-msnap]').forEach(b => b.classList.toggle('active', b.dataset.msnap === measureSnapMode));
+  };
+  document.querySelectorAll('[data-msnap]').forEach(b => { b.onclick = () => { measureSnapMode = b.dataset.msnap; syncMeasureSnap(); }; });
+  syncMeasureSnap();
   $('measureSticky').onchange = e => { measureSticky = e.target.checked; };
   $('measureEraseAll').onclick = () => {
     measures = [];
