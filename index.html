@@ -236,7 +236,7 @@
   <div class="group">
     <div class="glabel">View</div>
     <button class="rail-btn" data-drawer="grid" data-hold data-tap="grid" id="gridBtn" title="Grid: tap to show or hide, hold for grid options">▦<span class="cap">Grid</span></button>
-    <button class="rail-btn" id="dimAllBtn" title="Dimension lines on all shapes">📐<span class="cap">Dims</span></button>
+    <button class="rail-btn" data-drawer="dims" data-hold data-tap="dims" id="dimAllBtn" title="Dims: tap to show or hide on all shapes, hold for dimension options">📐<span class="cap">Dims</span></button>
     <button class="rail-btn" id="resetViewBtn" title="Reset zoom">⤢<span class="cap">Zoom 1:1</span></button>
   </div>
 
@@ -360,6 +360,19 @@
   <p class="hint">With a Pencil, pressing harder makes the stroke bigger and darker. A finger or mouse paints at full size.</p>
 </aside>
 
+<!-- Dims drawer: when dimension lines show -->
+<aside class="drawer" id="drawer-dims" aria-label="Dims">
+  <h3>Dims <button class="close" data-close aria-label="Close">✕</button></h3>
+  <div class="sub">Show dimension lines</div>
+  <div class="opt-row">
+    <button class="opt-btn" data-dimmode="live">While drawing</button>
+    <button class="opt-btn" data-dimmode="always">Always</button>
+    <button class="opt-btn" data-dimmode="none">None</button>
+  </div>
+  <button id="dimKeepBtn" class="opt-btn">Keep dimensions on drawing: Off</button>
+  <p class="hint">Dimensions show the width and height of a rectangle or oval. For an arc, the width is the chord and the height is the bulge. While drawing shows them only as you draw; Keep leaves them on the drawing. Always shows them on every shape. Shape dims in the top bar turns them on or off for the selected shape.</p>
+</aside>
+
 <!-- Shapes drawer -->
 <aside class="drawer" id="drawer-shapes" aria-label="Shapes">
   <h3>Shapes <button class="close" data-close aria-label="Close">✕</button></h3>
@@ -372,10 +385,6 @@
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
   <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
   <input id="shapeWidth" class="width-input" type="range" min="1" max="30" value="4">
-  <div class="sub">Dimensions</div>
-  <button id="dimLiveBtn" class="opt-btn">📏 Dimensions while drawing: Off</button>
-  <button id="dimKeepBtn" class="opt-btn">Keep dimensions on drawing: Off</button>
-  <p class="hint">Dimensions show the width and height of a rectangle or oval as you draw it. For an arc, the width is the chord and the height is the bulge. Keep them to leave them on the drawing.</p>
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved. Select an arc, then drag its diamond handle to change the bulge. Drag past the chord to flip the arc to the other side.</p>
 </aside>
 
@@ -545,7 +554,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.6';
+  const APP_VERSION = '0.31.7';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2822,8 +2831,8 @@
   }
 
   function syncDimButtons() {
-    $('dimLiveBtn').textContent = dimLive ? '📏 Dimensions while drawing: On' : '📏 Dimensions while drawing: Off';
-    $('dimLiveBtn').classList.toggle('active', dimLive);
+    const mode = dimsAll ? 'always' : dimLive ? 'live' : 'none';
+    document.querySelectorAll('[data-dimmode]').forEach(b => b.classList.toggle('active', b.dataset.dimmode === mode));
     $('dimKeepBtn').textContent = dimKeep ? 'Keep dimensions on drawing: On' : 'Keep dimensions on drawing: Off';
     $('dimKeepBtn').classList.toggle('active', dimKeep);
   }
@@ -2853,7 +2862,6 @@
     if (i >= 0) selected = strokes[i];
     redrawInk();
   }
-  $('dimAllBtn').onclick = () => setDimsAll(!dimsAll);
   // Shows or hides dimension lines on the selected shape only
   function toggleSelectedDims() {
     if (!selected || !isDimShape(selected)) return;
@@ -3097,7 +3105,7 @@
     $('colorBtn').classList.toggle('open', colorOn);
     if (openDrawer === 'text') syncTextDrawer();
     if (openDrawer === 'grid') { syncGridDrawer(); syncScaleText(); }
-    if (openDrawer === 'shapes') syncDimButtons();
+    if (openDrawer === 'dims') syncDimButtons();
   }
 
   document.querySelectorAll('[data-drawer]').forEach(b => {
@@ -3114,8 +3122,10 @@
 
   // Pen, Brush, Eraser and Measure: a tap selects the tool only; holding for about half a second
   // opens its drawer. This keeps quick switching from covering the canvas with drawers.
-  // The Grid button is different: a tap shows or hides the grid, and a hold opens its drawer.
+  // The Grid and Dims buttons are different: a tap shows or hides the grid or the dimensions, and a hold opens the drawer.
   const HOLD_MS = 500;
+  // Buttons whose tap does something other than selecting a tool
+  const taps = { grid: () => toggleGridLayer(), dims: () => setDimsAll(!dimsAll) };
   document.querySelectorAll('[data-hold]').forEach(b => {
     const name = b.dataset.drawer, toolName = b.dataset.tool;   // Grid has no tool
     let timer = 0, held = false;
@@ -3137,7 +3147,7 @@
     b.addEventListener('contextmenu', e => e.preventDefault());   // no iPad callout on long press
     b.onclick = () => {
       if (held) { held = false; return; }   // the long press already opened the drawer
-      if (b.dataset.tap === 'grid') { toggleGridLayer(); return; }
+      if (b.dataset.tap) { taps[b.dataset.tap](); return; }
       setTool(toolName);
     };
   });
@@ -3317,8 +3327,17 @@
   $('measureImpBtn').onclick = () => { measureMetric = false; syncMeasureUnits(); };
   $('measureMetBtn').onclick = () => { measureMetric = true; syncMeasureUnits(); };
   syncMeasureUnits();
-  $('dimLiveBtn').onclick = () => { dimLive = !dimLive; syncDimButtons(); };
   $('dimKeepBtn').onclick = () => { dimKeep = !dimKeep; syncDimButtons(); };
+  // While drawing, Always and None. Switching to Always clears each shape's own setting, as Dims always did.
+  document.querySelectorAll('[data-dimmode]').forEach(b => {
+    b.onclick = () => {
+      const m = b.dataset.dimmode;
+      if (m === 'always') { if (!dimsAll) setDimsAll(true); dimLive = false; }
+      else if (m === 'live') { if (dimsAll) setDimsAll(false); dimLive = true; }
+      else { if (dimsAll) setDimsAll(false); dimLive = false; }
+      syncDimButtons();
+    };
+  });
 
   $('resetViewBtn').onclick = () => {
     view = { scale: 1, ox: 0, oy: 0 };
