@@ -170,11 +170,12 @@
   #toast.show { opacity: 1; }
   .rail-btn, .tool-btn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
   .opt-btn[hidden] { display: none; }
-  #choiceDialog {
+  #choiceDialog, #renameDialog {
     border: 2px solid #8a8a8a; border-radius: 14px; padding: 18px; width: min(360px, 88vw);
     background: #fff; color: #111; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
   }
-  #choiceDialog::backdrop { background: rgba(0,0,0,0.35); }
+  #choiceDialog::backdrop, #renameDialog::backdrop { background: rgba(0,0,0,0.35); }
+  #renameInput { width: 100%; box-sizing: border-box; font-size: 17px; padding: 9px 10px; border: 2px solid #8a8a8a; border-radius: 10px; margin: 0 0 16px; }
   .choice-msg { font-size: 17px; line-height: 1.35; margin: 0 0 16px; }
   .choice-btns { display: flex; gap: 8px; }
   .choice-btns button {
@@ -389,6 +390,7 @@
   </div>
   <label class="check"><input type="checkbox" id="measureSticky"> Sticky: keep readings on screen</label>
   <button id="measureEraseAll" class="opt-btn">🧹 Erase All</button>
+  <button id="measureToggleBtn" class="opt-btn">⊘ Show measurements</button>
   <div class="sub">Units</div>
   <div class="opt-row">
     <button id="measureImpBtn" class="opt-btn">Inches</button>
@@ -527,6 +529,12 @@
   <p class="choice-msg" id="choiceMsg"></p>
   <div class="choice-btns" id="choiceBtns"></div>
 </dialog>
+<!-- Rename dialog for layers -->
+<dialog id="renameDialog">
+  <p class="choice-msg">Layer name</p>
+  <input id="renameInput" type="text" maxlength="30" autocomplete="off">
+  <div class="choice-btns"><button id="renameCancel">Cancel</button><button id="renameOk" class="primary">Save</button></div>
+</dialog>
 <!-- Calibration panel: type the reading from the on-screen ruler -->
 <div id="calibPanel" hidden>
   <p class="choice-msg">Lay a credit card's long edge (85.6 mm) along the ruler on the screen, starting at zero. Type the mm mark where the card ends.</p>
@@ -537,7 +545,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.5';
+  const APP_VERSION = '0.31.6';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -566,7 +574,9 @@
   // so it has no objects, and it prints only when it is visible.
   let layers = [
     { id: 'GRID', name: 'Grid', visible: false, opacity: 1, grid: true },
-    { id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }
+    { id: 'L1', name: 'Layer 1', visible: true, opacity: 1 },
+    // Measurements are a special layer at the top. Its visibility shows or hides every reading.
+    { id: 'MEASURE', name: 'Measurements', visible: true, opacity: 1, measure: true }
   ];  // bottom to top
   let activeLayer = 'L1';
   let layerSeq = 1;
@@ -1507,8 +1517,10 @@
       drawSelection(ctx);
     }
     setTransform(ctx);
-    for (const m of measures) drawMeasure(ctx, m);
-    if (measure) drawMeasure(ctx, measure);
+    if (measuresVisible()) {
+      for (const m of measures) drawMeasure(ctx, m);
+      if (measure) drawMeasure(ctx, measure);
+    }
     if (calibMode) drawCalibRuler(ctx);
   }
 
@@ -1877,6 +1889,7 @@
 
     // Measure: drag from one point to another to read the distance
     if (tool === 'measure') {
+      if (!measuresVisible()) updateLayer('MEASURE', { visible: true }, true);   // a new reading is shown
       const p = measurePoint(raw);
       measure = { a: p, b: p };
       activePointerId = e.pointerId;
@@ -2106,6 +2119,7 @@
     const idx = layers.findIndex(l => l.id === id);
     const j = idx + dir;
     if (idx < 1 || j < 1 || j >= layers.length) return;   // the grid stays at the bottom
+    if (layers[idx].measure || layers[j].measure) return;   // measurements stay at the top
     const arr = layers.slice();
     [arr[idx], arr[j]] = [arr[j], arr[idx]];
     layers = arr;
@@ -2122,26 +2136,58 @@
       const eye = el('button', { textContent: l.visible ? '👁' : '⊘', title: l.visible ? 'Hide layer' : 'Show layer' });
       eye.onclick = e => { e.stopPropagation(); updateLayer(l.id, { visible: !l.visible }, true); };
 
-      const name = el('span', { className: 'lname', textContent: l.name, title: 'Tap to select, double-tap to rename' });
-      name.ondblclick = () => {
-        if (l.grid) return;
-        const n = prompt('Layer name', l.name);
-        if (n && n.trim()) updateLayer(l.id, { name: n.trim().slice(0, 30) }, true);
+      const name = el('span', { className: 'lname', textContent: l.name, title: 'Tap to select' });
+      const ren = el('button', { textContent: '✎', title: 'Rename layer' });
+      ren.onclick = async e => {
+        e.stopPropagation();
+        const n = await askName(l.name);
+        if (n) updateLayer(l.id, { name: n }, true);
       };
 
       const op = el('input', { type: 'range', min: 0, max: 100, value: Math.round(l.opacity * 100), title: 'Opacity' });
       op.oninput = () => updateLayer(l.id, { opacity: Number(op.value) / 100 }, false);
       op.onclick = e => e.stopPropagation();
 
-      const up = el('button', { textContent: '↑', title: 'Move up', disabled: !!l.grid || i === layers.length - 1 });
+      const up = el('button', { textContent: '↑', title: 'Move up', disabled: !!l.grid || !!l.measure || i >= layers.length - 2 });
       up.onclick = e => { e.stopPropagation(); moveLayer(l.id, 1); };
-      const down = el('button', { textContent: '↓', title: 'Move down', disabled: !!l.grid || i <= 1 });
+      const down = el('button', { textContent: '↓', title: 'Move down', disabled: !!l.grid || !!l.measure || i <= 1 });
       down.onclick = e => { e.stopPropagation(); moveLayer(l.id, -1); };
 
-      const row = el('div', { className: 'layer-row' + (l.id === activeLayer ? ' active' : '') }, eye, name, op, up, down);
-      row.onclick = () => { if (!l.grid) activeLayer = l.id; renderLayerList(); };
+      const row = el('div', { className: 'layer-row' + (l.id === activeLayer ? ' active' : '') }, eye, name, ren, op, up, down);
+      row.onclick = () => { if (!l.grid && !l.measure) activeLayer = l.id; renderLayerList(); };
       list.append(row);
     }
+    syncMeasureToggle();
+  }
+
+  // The measurements layer, and whether it is showing
+  const measureLayer = () => ({ id: 'MEASURE', name: 'Measurements', visible: true, opacity: 1, measure: true });
+  function measuresVisible() { return !!(layers.find(l => l.measure) || {}).visible; }
+  function syncMeasureToggle() {
+    const b = $('measureToggleBtn');
+    if (b) b.textContent = measuresVisible() ? '👁 Hide measurements' : '⊘ Show measurements';
+  }
+  $('measureToggleBtn').onclick = () => updateLayer('MEASURE', { visible: !measuresVisible() }, true);
+
+  // Asks for a layer name. Resolves with the trimmed name, or null if cancelled.
+  function askName(current) {
+    const dlg = $('renameDialog'), input = $('renameInput');
+    return new Promise(resolve => {
+      let done = false;
+      const finish = value => {
+        if (done) return;
+        done = true;
+        if (dlg.open) dlg.close();
+        resolve(value);
+      };
+      input.value = current;
+      $('renameCancel').onclick = () => finish(null);
+      $('renameOk').onclick = () => { const n = input.value.trim().slice(0, 30); finish(n || null); };
+      input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('renameOk').click(); } };
+      dlg.oncancel = () => finish(null);
+      dlg.showModal();
+      setTimeout(() => { input.focus(); input.select(); }, 50);
+    });
   }
 
   $('layersBtn').onclick = () => {
@@ -2163,7 +2209,7 @@
   };
 
   $('delLayer').onclick = () => {
-    if (layers.filter(l => !l.grid).length <= 1) { showToast('Keep at least one layer'); return; }
+    if (layers.filter(l => !l.grid && !l.measure).length <= 1) { showToast('Keep at least one layer'); return; }
     const idx = layers.findIndex(l => l.id === activeLayer);
     pushHistory(snapshot());
     const id = activeLayer;
@@ -2531,7 +2577,7 @@
     redoStack = [];
     clipboardItem = null;
     endTextEdit();
-    layers = [gridLayer(), { id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }];
+    layers = [gridLayer(), { id: 'L1', name: 'Layer 1', visible: true, opacity: 1 }, measureLayer()];
     layerSeq = 1;
     activeLayer = 'L1';
     strokes = [];
@@ -2594,12 +2640,14 @@
       if (!newLayers.length) throw new Error('no layers');
       // The grid layer always exists, at the bottom
       const gridIn0 = newLayers.find(l => l.id === 'GRID');
+      const measIn = newLayers.find(l => l.id === 'MEASURE' || l.measure);
       newLayers = [
-        { id: 'GRID', name: 'Grid', visible: gridIn0 ? gridIn0.visible !== false : false,
+        { id: 'GRID', name: gridIn0 && gridIn0.name ? String(gridIn0.name).slice(0, 30) : 'Grid', visible: gridIn0 ? gridIn0.visible !== false : false,
           opacity: gridIn0 && Number.isFinite(Number(gridIn0.opacity)) ? Math.min(1, Math.max(0, Number(gridIn0.opacity))) : 1, grid: true },
-        ...newLayers.filter(l => l.id !== 'GRID' && !l.grid)
+        ...newLayers.filter(l => l.id !== 'GRID' && !l.grid && !l.measure && l.id !== 'MEASURE'),
+        { id: 'MEASURE', name: 'Measurements', visible: measIn ? measIn.visible !== false : true, opacity: 1, measure: true }
       ];
-      if (newLayers.length < 2) throw new Error('no drawing layer');
+      if (newLayers.length < 3) throw new Error('no drawing layer');
       dimsAll = !!data.dimsAll;
       if (data.grid) {
         gridUnit = data.grid.unit === 'cm' ? 'cm' : 'in';
@@ -2616,7 +2664,7 @@
         delete s.imageData;
         if (raw.imageData) s.image = await loadDataUrl(raw.imageData);
         // Objects never live on the grid layer; orphaned ones go to the bottom drawing layer
-        if (!ids.has(s.layer) || s.layer === 'GRID') s.layer = newLayers[1].id;
+        if (!ids.has(s.layer) || s.layer === 'GRID' || s.layer === 'MEASURE') s.layer = newLayers[1].id;
         if (validItem(s)) items.push(s);
       }
 
@@ -2624,7 +2672,7 @@
       endTextEdit();
       layers = newLayers;
       strokes = items;
-      activeLayer = ids.has(data.activeLayer) && data.activeLayer !== 'GRID' ? data.activeLayer : newLayers[newLayers.length - 1].id;
+      activeLayer = ids.has(data.activeLayer) && data.activeLayer !== 'GRID' && data.activeLayer !== 'MEASURE' ? data.activeLayer : newLayers[newLayers.length - 2].id;
       layerSeq = newLayers.reduce((m, l) => {
         const n = parseInt(l.id.slice(1), 10);
         return Number.isFinite(n) ? Math.max(m, n) : m;

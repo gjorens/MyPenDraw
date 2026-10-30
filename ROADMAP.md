@@ -5,7 +5,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 ## Done
 
 - Pen, eraser, six fixed colours and six custom colours (hold to edit), with a detachable colour window
-- Layers: show/hide, reorder, opacity. The grid is a special bottom layer.
+- Layers: show/hide, reorder, opacity, rename (✎ on each row). The grid is a special bottom layer; measurements are a special top layer, shown or hidden from the Measure drawer.
 - Shapes: rectangle, oval, arc, triangle. Arcs have a bulge handle to change their depth, and a radial handle at each end to move that end round the circle (up to 350 degrees, and past the other end to a reversed arc). The centre handle turns the whole arc about its centre; tapping it locks the centre in place. With the lock on, an end handle places its end anywhere, snapping to other ends or the grid. An arc's radius is limited to 10 inches.
 - Dimension lines on rectangles, ovals, arcs and triangles: Dims shows them on all shapes, Shape dims shows them on the selected one. Circles and arcs show their diameter.
 - Brush: round, soft, square, flat and spray shapes, with size, opacity, colour and Pencil pressure (harder means bigger and darker). Brush strokes are undoable but not editable. The shapes wrap three across, and a sample box shows the current brush (v0.31.3).
@@ -40,4 +40,4 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Imported pictures are a single object. Their parts cannot be selected separately, until pixel selection is added.
 - Scale is saved on this device only, until scale-in-project is added.
 - Dimension lines can only be turned on before drawing a rectangle or oval.
-- Measurements are not saved with the drawing.
+- Measurements are not saved with the drawing, only the visibility of their layer.
