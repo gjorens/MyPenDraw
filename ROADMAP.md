@@ -11,7 +11,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Brush: round, soft, square, flat and spray shapes, with size, opacity, colour and Pencil pressure (harder means bigger and darker). Brush strokes are undoable but not editable.
 - Fill, text (font, size, colour, bold), and pictures (SVG, PNG, JPEG, WebP, GIF)
 - Select, move, resize, rotate, cut, copy, paste, delete
-- Grid: inches or centimetres, snap to grid, spacing changeable at any time
+- Grid: inches or centimetres, snap to grid, spacing changeable at any time. Keeps its true spacing after a saved calibration is loaded (v0.31.1)
 - Measure: hold for a drawer with Snap to grid, Sticky readings that stay until Erase All, and Imperial or Metric units
 - Scale calibration with an on-screen 150 mm ruler and a credit card
 - Project save and open (.pendraw), New project with Cancel / Delete / Save

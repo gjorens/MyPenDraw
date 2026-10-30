@@ -527,7 +527,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.0';
+  const APP_VERSION = '0.31.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2617,6 +2617,7 @@
   let dimKeep = false;      // keep those dimension lines on the drawing
   let dimsAll = false;      // dimension lines on every shape that does not have its own setting
   const FRACS = ['', '1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8'];
+  updateGrid();             // a saved calibration changes the scale, so set the grid from it on load
 
   const gridLayer = () => layers.find(l => l.id === 'GRID');
   const gridOn = () => !!(gridLayer() && gridLayer().visible);
