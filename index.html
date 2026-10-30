@@ -566,7 +566,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.32.1';
+  const APP_VERSION = '0.32.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -679,6 +679,9 @@
     redrawInk();
   }
   window.addEventListener('resize', resize);
+  // The canvas can change size without a window resize (the top bar wrapping, a split window);
+  // its bitmap must follow, or drawing and taps no longer line up
+  if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(canvas);
 
   // ---------- geometry helpers ----------
   function setTransform(c) {

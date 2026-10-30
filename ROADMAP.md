@@ -37,6 +37,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 ## Known limits
 
 - Undo keeps 15 steps.
+- Canvas: taps line up with the drawing after the canvas changes size (v0.32.2).
 - Imported pictures are a single object. Their parts cannot be selected separately, until pixel selection is added.
 - Scale is saved on this device only, until scale-in-project is added.
 - Dimension lines can only be turned on before drawing a rectangle or oval.
