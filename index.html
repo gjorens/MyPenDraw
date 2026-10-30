@@ -377,10 +377,19 @@
   <button class="opt-btn tool-btn" data-tool="oval" id="ovalBtn">○ Oval</button>
   <button class="opt-btn tool-btn" data-tool="arc" id="arcBtn">◠ Arc</button>
   <button class="opt-btn tool-btn" data-tool="tri" id="triBtn">△ Triangle</button>
+  <button class="opt-btn tool-btn" data-tool="poly" id="polyBtn">⬠ Polygon</button>
+  <div class="sub">Corners snap to</div>
+  <div class="opt-row">
+    <button class="opt-btn" data-polysnap="grid">Grid</button>
+    <button class="opt-btn" data-polysnap="line">Nearest line</button>
+    <button class="opt-btn" data-polysnap="none">None</button>
+  </div>
+  <button id="polyCloseBtn" class="opt-btn">Close polygon</button>
   <div class="sub">Fill</div>
   <button class="opt-btn" id="solidBtn">■ Solid fill: Off</button>
   <div class="sub">Width <span class="width-label" id="shapeWidthLabel">4</span></div>
   <input id="shapeWidth" class="width-input" type="range" min="1" max="30" value="4">
+  <p class="hint">Polygon: tap each corner. Tap the first corner, or Close polygon, to finish. Corners follow the snap choice above.</p>
   <p class="hint">Drag to size a shape. An arc runs from where the pen goes down to where it lifts, and bulges toward the side you first moved. Select an arc, then drag its diamond handle to change the bulge. Drag past the chord to flip the arc to the other side.</p>
 </aside>
 
@@ -556,7 +565,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.31.9';
+  const APP_VERSION = '0.32.0';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -596,6 +605,8 @@
   let undoStack = [], redoStack = [];
   let current = null;        // item being drawn
   let preview = null;        // line or shape being dragged out (not yet committed)
+  let polyDraft = null;      // polygon being placed: its corners so far (not yet committed)
+  let polySnapMode = 'grid'; // where polygon corners snap: 'grid', 'line' or 'none'
   let measure = null;        // measurement being dragged or just read: {a, b} in drawing units, not saved
   let measures = [];         // sticky readings kept on screen until Erase All
   let measureSticky = false; // keep each reading on screen
@@ -817,9 +828,36 @@
         }
       } else {
         for (let i = 0; i + 1 < s.points.length; i++) consider(s.points[i].x, s.points[i].y, s.points[i + 1].x, s.points[i + 1].y);
+        if (s.shape === 'poly' && s.closed && s.points.length > 2) {
+          const a = s.points[s.points.length - 1], b = s.points[0];
+          consider(a.x, a.y, b.x, b.y);
+        }
       }
     }
     return best;
+  }
+  // Where a polygon corner lands, from the Polygon snap setting
+  function polyVertex(q) {
+    if (polySnapMode === 'grid') return snapPt(q);
+    if (polySnapMode === 'line') return nearestLinePoint(q) || q;
+    return q;
+  }
+  // Finishes the polygon being placed. It needs three corners.
+  function finishPoly() {
+    if (!polyDraft) return;
+    if (polyDraft.points.length < 3) { showToast('A polygon needs three corners'); return; }
+    pushHistory(snapshot());
+    strokes = [...strokes, { ...polyDraft, closed: true }];
+    polyDraft = null;
+    preview = null;
+    scheduleRender(true);
+    updateButtons();
+  }
+  function cancelPoly() {
+    if (!polyDraft) return;
+    polyDraft = null;
+    preview = null;
+    scheduleRender(false);
   }
   // Where a measure endpoint lands, from the Snap to setting in the Measure drawer
   function measurePoint(q) {
@@ -1139,6 +1177,15 @@
   function drawShape(c, s) {
     c.save();
     styleFor(c, s);
+    if (s.shape === 'poly') {
+      c.beginPath();
+      s.points.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
+      if (s.closed) { c.closePath(); if (s.filled) c.fill(); }
+      c.lineWidth = s.size;
+      c.stroke();
+      c.restore();
+      return;
+    }
     let target = s;
     if (isFrame(s) && s.rot) {
       // A rotated rectangle or oval is drawn in its own frame, centred on the origin
@@ -1895,6 +1942,20 @@
       renderLayerList();
       scheduleRender(false);
       updateButtons();
+      return;
+    }
+
+    // Polygon: each tap places a corner. Tapping the first corner (with three or more) closes it.
+    if (tool === 'poly') {
+      if (!polyDraft) polyDraft = { shape: 'poly', layer: activeLayer, color, size: penSize, filled: shapeFilled, points: [] };
+      const first = polyDraft.points[0];
+      if (first && polyDraft.points.length >= 3 && Math.hypot(raw.x - first.x, raw.y - first.y) * view.scale < 14) {
+        finishPoly();
+      } else {
+        polyDraft.points = [...polyDraft.points, polyVertex(raw)];
+        preview = polyDraft;
+        scheduleRender(false);
+      }
       return;
     }
 
@@ -3102,6 +3163,7 @@
   function setTool(t) {
     endTextEdit();
     if (t !== 'measure') measure = null;   // a measurement stays only while the measure tool is in use
+    if (t !== 'poly') cancelPoly();
     tool = t;
     if (t !== 'select') selected = null;
     syncTools();
@@ -3145,7 +3207,7 @@
       if (name === 'colors' && colorFloating) { colorWindowShown = !colorWindowShown; syncDrawers(); return; }
       // Opening a drawer for a tool selects that tool
       if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
-      if (name === 'shapes' && !SHAPES.includes(tool)) setTool('rect');
+      if (name === 'shapes' && !SHAPES.includes(tool) && tool !== 'poly') setTool('rect');
       toggleDrawer(name);
     };
   });
@@ -3321,6 +3383,14 @@
   $('lineBtn').onclick = e => { mode = 'line'; setGroup('mode', e.currentTarget); };
 
   // Shapes drawer: filled or outline
+  document.querySelectorAll('[data-polysnap]').forEach(b => {
+    b.onclick = () => {
+      polySnapMode = b.dataset.polysnap;
+      document.querySelectorAll('[data-polysnap]').forEach(x => x.classList.toggle('active', x === b));
+    };
+  });
+  document.querySelector('[data-polysnap="grid"]').classList.add('active');
+  $('polyCloseBtn').onclick = finishPoly;
   $('solidBtn').onclick = e => {
     shapeFilled = !shapeFilled;
     e.currentTarget.textContent = shapeFilled ? '■ Solid fill: On' : '■ Solid fill: Off';
