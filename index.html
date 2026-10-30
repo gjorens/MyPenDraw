@@ -591,7 +591,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.34.3';
+  const APP_VERSION = '0.34.4';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -897,12 +897,13 @@
     const C = Math.sqrt(3) / 2, D = GRID, grid = polySnapMode === 'grid';
     let A;
     if (paraStyle === 'flat') {
-      // The base runs from S towards E's side (so dragging right draws to the right). The sides lean
-      // at 30 degrees, leaning right when the drag goes down and left when it goes up.
+      // The base runs from S towards the drag's side. The sides lean at 30 degrees along the lattice:
+      // up or down with the drag, and to the right (or left, if the drag goes left) of the base.
       const h = E.y - S.y;
       let W = E.x - S.x;                                  // horizontal length of the base
       if (grid) { const step = gridStyle === 'iso' ? 2 * D : D; W = Math.round(W / step) * step; }
-      const top = paraSnap({ x: S.x + 2 * C * h, y: S.y + h });   // the top-left corner
+      const lean = W < 0 ? -1 : 1;
+      const top = paraSnap({ x: S.x + lean * 2 * C * Math.abs(h), y: S.y + h });   // the far corner of the side
       const base = { x: S.x + W, y: S.y };
       return [
         { x: S.x, y: S.y, p: 0.5 },
