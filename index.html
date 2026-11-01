@@ -581,7 +581,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.36.4';
+  const APP_VERSION = '0.36.5';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2492,8 +2492,9 @@
     const p = $('layerPanel');
     p.hidden = !p.hidden;
     if (!p.hidden) renderLayerList();
+    if (colorWindowShown) snapColorWindowRight();
   };
-  $('closeLayers').onclick = () => { $('layerPanel').hidden = true; };
+  $('closeLayers').onclick = () => { $('layerPanel').hidden = true; if (colorWindowShown) snapColorWindowRight(); };
 
   $('addLayer').onclick = () => {
     pushHistory(snapshot());
@@ -3517,7 +3518,8 @@
   function snapColorWindowRight() {
     const d = $('drawer-colors');
     colorPos.x = Math.max(0, window.innerWidth - d.offsetWidth - 10);
-    colorPos.y = 66;
+    // Bottom right while the Layers panel is open (it sits top right), otherwise top right
+    colorPos.y = !$('layerPanel').hidden ? Math.max(0, window.innerHeight - d.offsetHeight - 10) : 66;
     d.style.left = colorPos.x + 'px';
     d.style.top = colorPos.y + 'px';
   }
