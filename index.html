@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.4';
+  const APP_VERSION = '0.37.5';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2061,10 +2061,12 @@
       item = applyFrame(ref, { cx, cy, w, h, rot: o.rot });
     }
     item = keepCentre(item);
-    // Fills seeded inside the object follow it, keeping their place in the object's frame
+    // Fills seeded inside the object follow it, keeping their place in the object's frame.
+    // Rectangles and ovals are stored as points, so their frames come from frameOf.
+    const fromF = frameOf(ref), toF = frameOf(item);
     strokes = d.before.items.map(s => {
       if (s === ref) return item;
-      if (s.fill && s.layer === ref.layer && fillSeedInFrame(s, ref).inside) return { ...s, ...moveFillSeed(s, ref, item) };
+      if (s.fill && s.layer === ref.layer && fillSeedInFrame(s, fromF).inside) return { ...s, ...moveFillSeed(s, fromF, toF) };
       return s;
     });
     selected = item;
