@@ -77,7 +77,7 @@
   .drawer .close { width: 40px; height: 40px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff; font-size: 18px; cursor: pointer; }
   .drawer .sub { font-size: 13px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: .4px; margin: 14px 0 8px; }
   .drawer .hint { font-size: 13px; color: #444; margin-top: 10px; line-height: 1.4; }
-  .grid-sw { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; justify-items: center; }
+  .grid-sw { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; justify-items: center; }
   .swatch, button.custom {
     width: 52px !important; height: 52px !important; min-width: 52px !important; border-radius: 50% !important;
     padding: 0; border: 2px solid #fff !important; box-shadow: 0 0 0 1.5px #5a5a5a; cursor: pointer;
@@ -91,6 +91,15 @@
     border: 2px solid #8a8a8a; border-radius: 14px; box-shadow: 0 10px 28px rgba(0,0,0,0.3);
   }
   .drawer.floating h3 { cursor: move; touch-action: none; user-select: none; -webkit-user-select: none; }
+  /* Tighter spacing for the detached colour window, about 30% smaller than the docked drawer */
+  .drawer.floating { width: 200px; padding: 10px; }
+  .drawer.floating h3 { margin: 0 0 6px; font-size: 15px; }
+  .drawer.floating .detach-btn { height: 30px; font-size: 12px; padding: 0 8px; }
+  .drawer.floating .close { width: 30px; height: 30px; font-size: 14px; }
+  .drawer.floating .sub { margin: 8px 0 5px; font-size: 11px; }
+  .drawer.floating .grid-sw { gap: 6px; }
+  .drawer.floating .swatch, .drawer.floating button.custom { width: 36px !important; height: 36px !important; min-width: 36px !important; }
+  .drawer.floating .hint { font-size: 11px; margin-top: 6px; }
   .h3-btns { display: flex; gap: 6px; align-items: center; }
   .detach-btn {
     height: 40px; padding: 0 10px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
@@ -101,6 +110,14 @@
   .edit-row span { width: 48px; font-weight: 600; }
   .edit-row input { flex: 1; accent-color: var(--accent); }
   .edit-hex { font-size: 15px; font-weight: 700; text-align: center; margin-bottom: 8px; }
+  /* The custom colour editor: a popup over the page, opened by holding a custom colour */
+  #colorEditor {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30;
+    width: min(320px, 90vw); padding: 14px; background: #fff; color: #111;
+    border: 2px solid #8a8a8a; border-radius: 14px; box-shadow: 0 10px 28px rgba(0,0,0,0.3);
+  }
+  #colorEditor[hidden] { display: none; }
+  #colorEditor .sub { font-size: 13px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: .4px; margin: 0 0 8px; }
   .opt-btn {
     width: 100%; height: 52px; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff;
     display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px; font-size: 17px; font-weight: 600; color: #111; cursor: pointer; margin-bottom: 8px;
@@ -293,6 +310,8 @@
     <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
     <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
     <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
+    <button class="swatch" data-group="color" data-color="#0c8599" style="background:#0c8599" title="Teal"></button>
+    <button class="swatch" data-group="color" data-color="#8d5a2b" style="background:#8d5a2b" title="Brown"></button>
   </div>
   <div class="sub">Custom</div>
   <div class="grid-sw">
@@ -302,15 +321,8 @@
     <button class="swatch custom" data-group="color" data-idx="3" title="Custom colour 4"></button>
     <button class="swatch custom" data-group="color" data-idx="4" title="Custom colour 5"></button>
     <button class="swatch custom" data-group="color" data-idx="5" title="Custom colour 6"></button>
-  </div>
-  <div id="colorEditor" hidden>
-    <div class="sub">Edit custom colour <span id="editName"></span></div>
-    <div class="edit-preview" id="editPreview"></div>
-    <label class="edit-row"><span>Red</span><input type="range" id="edR" min="0" max="255"></label>
-    <label class="edit-row"><span>Green</span><input type="range" id="edG" min="0" max="255"></label>
-    <label class="edit-row"><span>Blue</span><input type="range" id="edB" min="0" max="255"></label>
-    <div class="edit-hex" id="editHex"></div>
-    <button class="opt-btn" id="editDone">Done</button>
+    <button class="swatch custom" data-group="color" data-idx="6" title="Custom colour 7"></button>
+    <button class="swatch custom" data-group="color" data-idx="7" title="Custom colour 8"></button>
   </div>
   <p class="hint">Tap a custom colour to use it. Hold it to change its colour.</p>
 </aside>
@@ -351,12 +363,16 @@
     <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
     <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
     <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
+    <button class="swatch" data-group="color" data-color="#0c8599" style="background:#0c8599" title="Teal"></button>
+    <button class="swatch" data-group="color" data-color="#8d5a2b" style="background:#8d5a2b" title="Brown"></button>
     <button class="swatch custom" data-group="color" data-idx="0" title="Custom colour 1"></button>
     <button class="swatch custom" data-group="color" data-idx="1" title="Custom colour 2"></button>
     <button class="swatch custom" data-group="color" data-idx="2" title="Custom colour 3"></button>
     <button class="swatch custom" data-group="color" data-idx="3" title="Custom colour 4"></button>
     <button class="swatch custom" data-group="color" data-idx="4" title="Custom colour 5"></button>
     <button class="swatch custom" data-group="color" data-idx="5" title="Custom colour 6"></button>
+    <button class="swatch custom" data-group="color" data-idx="6" title="Custom colour 7"></button>
+    <button class="swatch custom" data-group="color" data-idx="7" title="Custom colour 8"></button>
   </div>
   <div class="sub">Sample</div>
   <canvas id="brushSample" class="brush-sample" aria-label="Sample of the selected brush"></canvas>
@@ -539,6 +555,8 @@
     <button class="swatch" data-group="color" data-color="#2f9e44" style="background:#2f9e44" title="Green"></button>
     <button class="swatch" data-group="color" data-color="#f08c00" style="background:#f08c00" title="Orange"></button>
     <button class="swatch" data-group="color" data-color="#7048e8" style="background:#7048e8" title="Purple"></button>
+    <button class="swatch" data-group="color" data-color="#0c8599" style="background:#0c8599" title="Teal"></button>
+    <button class="swatch" data-group="color" data-color="#8d5a2b" style="background:#8d5a2b" title="Brown"></button>
   </div>
   <div class="sub">Custom</div>
   <div class="grid-sw">
@@ -548,9 +566,22 @@
     <button class="swatch custom" data-group="color" data-idx="3" title="Custom colour 4"></button>
     <button class="swatch custom" data-group="color" data-idx="4" title="Custom colour 5"></button>
     <button class="swatch custom" data-group="color" data-idx="5" title="Custom colour 6"></button>
+    <button class="swatch custom" data-group="color" data-idx="6" title="Custom colour 7"></button>
+    <button class="swatch custom" data-group="color" data-idx="7" title="Custom colour 8"></button>
   </div>
   <p class="hint">Changes apply to the selected text. With nothing selected, they set the next text you place. Hold a custom colour to change it.</p>
 </aside>
+
+<!-- Custom colour editor: a popup opened by holding a custom colour -->
+<div id="colorEditor" hidden role="dialog" aria-label="Edit custom colour">
+  <div class="sub">Edit custom colour <span id="editName"></span></div>
+  <div class="edit-preview" id="editPreview"></div>
+  <label class="edit-row"><span>Red</span><input type="range" id="edR" min="0" max="255"></label>
+  <label class="edit-row"><span>Green</span><input type="range" id="edG" min="0" max="255"></label>
+  <label class="edit-row"><span>Blue</span><input type="range" id="edB" min="0" max="255"></label>
+  <div class="edit-hex" id="editHex"></div>
+  <button class="opt-btn" id="editDone">Save to custom colours</button>
+</div>
 
 <!-- Layers float on the right -->
 <div id="layerPanel" hidden>
@@ -591,7 +622,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.34.8';
+  const APP_VERSION = '0.34.9';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -602,6 +633,7 @@
   const MIN_SCALE = 0.5, MAX_SCALE = 6;
   const HISTORY_LIMIT = 15;   // undo steps kept; older steps are dropped
   const CUSTOM_KEY = 'pendraw-custom-colors';
+  const DEFAULT_CUSTOM = ['#ffffff', '#868e96', '#495057', '#ffd43b', '#69db7c', '#4dabf7', '#ff8787', '#b197fc'];
   const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
   const IMPORT_MAX_PX = 2048;     // longest side of the stored bitmap
   const IMPORT_MAX_FILES = 10;
@@ -673,9 +705,10 @@
   function loadCustom() {
     try {
       const a = JSON.parse(localStorage.getItem(CUSTOM_KEY));
-      if (Array.isArray(a) && a.length === 6) return a;
+      // Earlier saves held six colours: keep those and add the two new defaults
+      if (Array.isArray(a) && a.length >= 6) return [...a.slice(0, 8), ...DEFAULT_CUSTOM].slice(0, 8);
     } catch (e) {}
-    return ['#ffffff', '#868e96', '#495057', '#ffd43b', '#69db7c', '#4dabf7'];
+    return DEFAULT_CUSTOM.slice();
   }
   function saveCustom(list) {
     try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(list)); } catch (e) {}
