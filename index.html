@@ -581,7 +581,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.36.3';
+  const APP_VERSION = '0.36.4';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -3444,7 +3444,12 @@
     if (b.dataset.hold) return;   // Pen and Eraser are handled by holdToOpen below
     b.onclick = () => {
       const name = b.dataset.drawer;
-      if (name === 'colors' && colorFloating) { colorWindowShown = !colorWindowShown; syncDrawers(); return; }
+      if (name === 'colors' && colorFloating) {
+        colorWindowShown = !colorWindowShown;
+        if (colorWindowShown) snapColorWindowRight();   // opens against the right edge
+        syncDrawers();
+        return;
+      }
       // Opening a drawer for a tool selects that tool
       if (name === 'text') setTool(selected && selected.kind === 'text' ? 'select' : 'text');
       if (name === 'shapes' && !SHAPES.includes(tool) && !['poly', 'vp', 'line', 'para'].includes(tool)) setTool('rect');
@@ -3505,6 +3510,14 @@
     const d = $('drawer-colors');
     d.classList.add('floating');
     clampColorWindow();
+    d.style.left = colorPos.x + 'px';
+    d.style.top = colorPos.y + 'px';
+  }
+  // Puts the palette against the right edge, just below the top bar
+  function snapColorWindowRight() {
+    const d = $('drawer-colors');
+    colorPos.x = Math.max(0, window.innerWidth - d.offsetWidth - 10);
+    colorPos.y = 66;
     d.style.left = colorPos.x + 'px';
     d.style.top = colorPos.y + 'px';
   }
