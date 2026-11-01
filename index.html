@@ -132,7 +132,7 @@
 
   /* ---------- layers panel ---------- */
   #layerPanel {
-    position: fixed; top: calc(var(--bar-h) + 8px); right: 10px; width: 310px; max-height: 65vh; overflow-y: auto;
+    position: fixed; top: calc(var(--bar-h) + 8px); right: 10px; width: 370px; max-height: 65vh; overflow-y: auto;
     background: #ffffff; border: 2px solid #8a8a8a; border-radius: 14px; padding: 10px; z-index: 15;
     box-shadow: 0 6px 18px rgba(0,0,0,0.2);
   }
@@ -142,7 +142,7 @@
   .layer-row { display: flex; align-items: center; gap: 6px; padding: 6px; border: 1.5px solid #aaa; border-radius: 10px; margin-bottom: 6px; background: #fff; cursor: pointer; }
   .layer-row.active { border-color: var(--accent); background: #e4ecff; box-shadow: inset 0 0 0 1px var(--accent); }
   .layer-row button { min-width: 32px; height: 32px; border-radius: 8px; border: 1.5px solid #8a8a8a; background: #fff; font-size: 15px; flex-shrink: 0; }
-  .layer-row button:disabled { opacity: 0.35; }
+  .layer-row button:disabled { opacity: 0.6; color: #666; border-color: #b0b0b0; }
   .layer-row .lname { flex: 1; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layer-row input[type=range] { width: 70px; flex-shrink: 0; accent-color: var(--accent); }
 
@@ -277,7 +277,6 @@
   <span class="bar-spacer"></span>
   <span class="bar-sep"></span>
   <div class="bar-group">
-    <button class="bar-btn" id="dimSelBtn" title="Dimension lines for the selected shape" disabled>📐<span class="cap">Shape dims</span></button>
     <button class="bar-btn" id="layersBtn" title="Layers">▤<span class="cap">Layers</span></button>
     <button class="bar-btn" data-drawer="settings" id="settingsBtn" title="Settings: scale calibration">⚙️<span class="cap">Settings</span></button>
   </div>
@@ -369,7 +368,8 @@
   <h3>Dims <button class="close" data-close aria-label="Close">✕</button></h3>
   <label class="check"><input type="checkbox" id="dimLiveCheck"> Show dimension lines while drawing</label>
   <label class="check"><input type="checkbox" id="dimKeepCheck"> Maintain dimension lines</label>
-  <p class="hint">The Dims button on the rail shows or hides dimension lines on all shapes. Shape dims in the top bar does the same for the selected shape.</p>
+  <label class="check"><input type="checkbox" id="dimSelCheck"> Show dimensions of selected objects</label>
+  <p class="hint">The Dims button on the rail shows or hides dimension lines on all shapes. The checkbox above does the same for the selected shape.</p>
 </aside>
 
 <!-- Shapes drawer -->
@@ -591,7 +591,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.34.5';
+  const APP_VERSION = '0.34.6';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2454,7 +2454,7 @@
       const down = el('button', { textContent: '↓', title: 'Move down', disabled: !!l.grid || !!l.measure || i <= 1 });
       down.onclick = e => { e.stopPropagation(); moveLayer(l.id, -1); };
 
-      const row = el('div', { className: 'layer-row' + (l.id === activeLayer ? ' active' : '') }, eye, name, ren, op, up, down);
+      const row = el('div', { className: 'layer-row' + (l.id === activeLayer ? ' active' : '') }, eye, name, op, up, down, ren);
       row.onclick = () => { if (!l.grid && !l.measure) activeLayer = l.id; renderLayerList(); };
       list.append(row);
     }
@@ -3162,8 +3162,8 @@
     dimAll.classList.toggle('active', dimsAll);
     dimAll.title = dimsAll ? 'Dimensions on all shapes: on (tap to hide)' : 'Dimensions on all shapes: off (tap to show)';
     const ok = !!selected && isDimShape(selected);
-    $('dimSelBtn').disabled = !ok;
-    $('dimSelBtn').classList.toggle('active', ok && showsDims(selected));
+    $('dimSelCheck').disabled = !ok;
+    $('dimSelCheck').checked = ok && showsDims(selected);
   }
   // Shows or hides dimension lines on every shape. Each shape's own setting is cleared, so all follow.
   function setDimsAll(on) {
@@ -3189,7 +3189,10 @@
     selected = item;
     redrawInk();
   }
-  $('dimSelBtn').onclick = toggleSelectedDims;
+  $('dimSelCheck').onchange = e => {
+    if (selected && isDimShape(selected) && e.target.checked !== showsDims(selected)) toggleSelectedDims();
+    syncDimControls();
+  };
 
   // ---------- export ----------
   // Exports visible layers on white, without the grid, selection, or preview
