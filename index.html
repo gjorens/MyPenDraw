@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.3';
+  const APP_VERSION = '0.37.4';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1998,6 +1998,21 @@
     scheduleRender(true);
   }
 
+  // A fill is stored as a seed point. Its position in an object's own frame tells whether it lies inside
+  // the object, and moveFillSeed carries it to the same place in the object's new frame.
+  function fillSeedInFrame(s, from) {
+    const dx = s.x - from.cx, dy = s.y - from.cy;
+    const c = Math.cos(-from.rot), sn = Math.sin(-from.rot);
+    const u = (dx * c - dy * sn) / (from.w || 1), v = (dx * sn + dy * c) / (from.h || 1);
+    return { u, v, inside: Math.abs(u) <= 0.5 && Math.abs(v) <= 0.5 };
+  }
+  function moveFillSeed(s, from, to) {
+    const { u, v } = fillSeedInFrame(s, from);
+    const lx = u * to.w, ly = v * to.h;
+    const c = Math.cos(to.rot), sn = Math.sin(to.rot);
+    return { x: to.cx + lx * c - ly * sn, y: to.cy + lx * sn + ly * c };
+  }
+
   // Picture move, rotate, and corner resize. Corner resize keeps the opposite corner
   // fixed in the picture's own frame, so the picture can be resized while tilted.
   function updatePictureDrag(q) {
@@ -2046,7 +2061,12 @@
       item = applyFrame(ref, { cx, cy, w, h, rot: o.rot });
     }
     item = keepCentre(item);
-    strokes = d.before.items.map(s => (s === ref ? item : s));
+    // Fills seeded inside the object follow it, keeping their place in the object's frame
+    strokes = d.before.items.map(s => {
+      if (s === ref) return item;
+      if (s.fill && s.layer === ref.layer && fillSeedInFrame(s, ref).inside) return { ...s, ...moveFillSeed(s, ref, item) };
+      return s;
+    });
     selected = item;
     scheduleRender(true);
   }
