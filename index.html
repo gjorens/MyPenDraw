@@ -244,6 +244,15 @@
     </button>
     <button class="rail-btn tool-btn" data-tool="fill" id="fillBtn" title="Fill area">🪣<span class="cap">Fill</span></button>
     <button class="rail-btn tool-btn" data-tool="text" data-drawer="text" id="textBtn" title="Text">T<span class="cap">Text</span></button>
+    <button class="rail-btn tool-btn" data-tool="measure" data-drawer="measure" data-hold id="measureBtn" title="Measure: drag to read a distance, hold for measure options">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <g transform="rotate(-45 12 12)">
+          <rect x="1.5" y="9" width="21" height="6" rx="1"></rect>
+          <path d="M5 9v3M8 9v2M11 9v3M14 9v2M17 9v3M20 9v3"></path>
+        </g>
+      </svg>
+      <span class="cap">Measure</span>
+    </button>
     <button class="rail-btn tool-btn" data-tool="eraser" data-drawer="eraser" data-hold id="eraserBtn" title="Eraser: tap to erase, hold for eraser options">🧽<span class="cap">Eraser</span></button>
   </div>
 
@@ -258,15 +267,6 @@
     <div class="glabel">View</div>
     <button class="rail-btn" data-drawer="grid" data-hold data-tap="grid" id="gridBtn" title="Grid: tap to show or hide, hold for grid options">▦<span class="cap">Grid</span></button>
     <button class="rail-btn" data-drawer="dims" data-hold data-tap="dims" id="dimAllBtn" title="Dims: tap to show or hide on all shapes, hold for dimension options">📐<span class="cap">Dims</span></button>
-    <button class="rail-btn tool-btn" data-tool="measure" data-drawer="measure" data-hold id="measureBtn" title="Measure: drag to read a distance, hold for measure options">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <g transform="rotate(-45 12 12)">
-          <rect x="1.5" y="9" width="21" height="6" rx="1"></rect>
-          <path d="M5 9v3M8 9v2M11 9v3M14 9v2M17 9v3M20 9v3"></path>
-        </g>
-      </svg>
-      <span class="cap">Measure</span>
-    </button>
     <button class="rail-btn" id="resetViewBtn" title="Reset zoom">⤢<span class="cap">Zoom 1:1</span></button>
   </div>
 
@@ -581,7 +581,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.36.2';
+  const APP_VERSION = '0.36.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
