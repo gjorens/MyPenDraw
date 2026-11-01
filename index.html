@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.6';
+  const APP_VERSION = '0.37.7';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2561,9 +2561,10 @@
     const p = $('layerPanel');
     p.hidden = !p.hidden;
     if (!p.hidden) renderLayerList();
-    if (colorWindowShown) snapColorWindowRight();
+    // The palette moves out of the way only when Layers opens; closing leaves it where it is
+    if (colorWindowShown && !p.hidden) snapColorWindowRight();
   };
-  $('closeLayers').onclick = () => { $('layerPanel').hidden = true; if (colorWindowShown) snapColorWindowRight(); };
+  $('closeLayers').onclick = () => { $('layerPanel').hidden = true; };
 
   $('addLayer').onclick = () => {
     pushHistory(snapshot());
