@@ -341,7 +341,7 @@
     <button class="opt-btn shape-btn" data-group="brush" data-shape="square" title="Square"><span class="shape-ico">■</span>Square</button>
     <button class="opt-btn shape-btn" data-group="brush" data-shape="flat" title="Flat nib at 45 degrees"><span class="shape-ico">▰</span>Flat</button>
     <button class="opt-btn shape-btn" data-group="brush" data-shape="spray" title="Spray"><span class="shape-ico">⁘</span>Spray</button>
-    <button class="opt-btn shape-btn" data-group="brush" data-shape="calligraphy" title="Calligraphy nib"><span class="shape-ico">✒</span>Calligraphy</button>
+    <button class="opt-btn shape-btn" data-group="brush" data-shape="calligraphy" title="Calligraphy nib"><span class="shape-ico">✒</span>Callig</button>
     <button class="opt-btn shape-btn" data-group="brush" data-shape="marker" title="Marker"><span class="shape-ico">▮</span>Marker</button>
     <button class="opt-btn shape-btn" data-group="brush" data-shape="star" title="Star stamps"><span class="shape-ico">★</span>Star</button>
     <button class="opt-btn shape-btn" data-group="brush" data-shape="splatter" title="Splatter"><span class="shape-ico">∴</span>Splatter</button>
@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.0';
+  const APP_VERSION = '0.37.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1154,7 +1154,7 @@
       // A narrow nib at 30 degrees: thick or thin according to the direction of the stroke
       c.translate(x, y);
       c.rotate(Math.PI / 6);
-      c.rect(-r, -d / 16, d, d / 8);
+      c.rect(-r, -d / 10, d, d / 5);
     } else if (stroke.brushShape === 'marker') {
       // A hard round edge, always full size; overlapping dabs build up the colour
       c.arc(x, y, r, 0, TAU);
@@ -1170,10 +1170,10 @@
       c.closePath();
     } else if (stroke.brushShape === 'splatter') {
       // A few drops of random size, scattered around the point
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < 14; i++) {
         const ang = rand() * TAU, rr = r * 1.3 * Math.sqrt(rand());
         const px = x + Math.cos(ang) * rr, py = y + Math.sin(ang) * rr;
-        const dr = Math.max(0.6, d * (0.05 + 0.12 * rand()));
+        const dr = Math.max(0.6, d * (0.06 + 0.14 * rand()));
         c.moveTo(px + dr, py);
         c.arc(px, py, dr, 0, TAU);
       }
@@ -1197,7 +1197,7 @@
   function brushFeed(c, stroke, state, pts) {
     // Dabs are spaced finely, so their overlaps blend into a smooth edge rather than beads
     // Stamps and splatters are spaced apart; the others overlap finely. Spacing depends on the size, never the pressure
-    const spacing = { star: 1.0, splatter: 0.9 }[stroke.brushShape] || 0.06;
+    const spacing = { star: 0.45, splatter: 0.4 }[stroke.brushShape] || 0.06;
     const step = Math.max(0.5, stroke.size * spacing);
     for (const raw of pts) {
       // Pressure eases from point to point, so the width doesn't jump with each sample
@@ -3402,7 +3402,8 @@
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.fillStyle = '#ffffff';
     c.fillRect(0, 0, W, H);
-    const amp = H * 0.12;   // wave height; the brush must fit above and below it
+    // A gentle wave, so the sample shows the brush at its true width (a steep wave would thicken it)
+    const amp = Math.min(H * 0.12, 1.5);
     const k = Math.min(1, (H - 4 - 2 * amp) / brushSize);
     const pts = [];
     for (let i = 0; i <= 24; i++) {
