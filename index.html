@@ -18,7 +18,7 @@
   #rail {
     position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail-w); z-index: 11;
     background: #ffffff; border-right: 2px solid #b8b8b8;
-    overflow-y: auto; padding: 6px 6px 12px; display: flex; flex-direction: column; gap: 2px;
+    overflow-y: auto; padding: 50px 6px 12px; display: flex; flex-direction: column; gap: 2px;   /* top space clears the iOS window buttons */
   }
   .group { display: flex; flex-direction: column; gap: 5px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid #cfcfcf; }
   .glabel { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #555; text-align: center; letter-spacing: .5px; margin-top: 4px; }
@@ -177,9 +177,9 @@
   #stage { position: fixed; top: var(--bar-h); left: var(--rail-w); right: 0; bottom: 0; }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
 
-  /* App icon at the top of the rail, where the rail meets the top bar; the version is overlaid on it */
-  #appIcon { position: relative; left: 8px; height: var(--bar-h); margin: -6px -6px 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  #appIcon img { width: 56px; height: 56px; border-radius: 13px; box-shadow: 0 0 0 1px #888; display: block; }
+  /* App icon at the top of the rail, sized like the tool buttons; the version is overlaid on it */
+  #appIcon { position: relative; width: 100%; height: 58px; flex-shrink: 0; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+  #appIcon img { width: 42px; height: 42px; border-radius: 10px; display: block; }
   #version { position: absolute; right: 2px; bottom: 2px; font-size: 10px; font-weight: 700; color: #111; background: #fff; border: 1px solid #555; padding: 1px 4px; border-radius: 5px; pointer-events: none; line-height: 1.2; }
   /* Top bar groups, with thin separators between them */
   .bar-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.1';
+  const APP_VERSION = '0.37.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);

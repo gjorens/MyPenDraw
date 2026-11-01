@@ -14,6 +14,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - If a drawer is open and you tap a tool that has its own drawer (Pen, Brush, Eraser, Text, Measure, or a shape tool), that drawer opens instead (v0.36.2).
 - Brush strokes are smoothed before they are painted, so hand wobble and sampling jitter give more even density (v0.36.6).
 - Brush shapes: Round, Soft, Square, Flat, Spray, Calligraphy (narrow nib at 30 degrees), Marker (hard edge, ignores pressure), Star (stamps) and Splatter (scattered drops) (v0.37.0).
+- App icon at the top of the tool rail, the same size as the tool buttons and clear of the iOS window buttons in windowed multitasking. The version sits in its corner (v0.37.2).
 - Brush: round, soft, square, flat and spray shapes, with size, opacity, colour and Pencil pressure (harder means bigger and darker). Brush strokes are undoable but not editable. The shapes wrap three across, and a sample box shows the current brush (v0.31.3).
 - Fill, text (font, size, colour, bold), and pictures (SVG, PNG, JPEG, WebP, GIF)
 - Select, move, resize, rotate, cut, copy, paste, delete
