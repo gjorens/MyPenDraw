@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.2';
+  const APP_VERSION = '0.37.3';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1987,7 +1987,13 @@
       fn = p => ({ x: nb.x0 + (p.x - b.x0) * sx, y: nb.y0 + (p.y - b.y0) * sy });
     }
     const item = { ...d.ref, points: d.orig.map(p => ({ ...fn(p), p: p.p })) };
-    strokes = d.before.items.map(s => (s === d.ref ? item : s));
+    // A fill is stored as a seed point, so a fill seeded inside the object moves with it
+    const inBox = (x, y) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+    strokes = d.before.items.map(s => {
+      if (s === d.ref) return item;
+      if (s.fill && s.layer === d.ref.layer && inBox(s.x, s.y)) return { ...s, ...fn({ x: s.x, y: s.y }) };
+      return s;
+    });
     selected = item;
     scheduleRender(true);
   }
