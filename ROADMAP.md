@@ -18,7 +18,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Scale calibration with an on-screen 150 mm ruler and a credit card, in Settings (gear in the top bar). The grid and dimension lines need a calibrated scale: turning either on starts calibration first, then turns it on (v0.31.9)
 - Project save and open (.pendraw), New project with Cancel / Delete / Save
 - File menu: new, open, save as drawing, PNG or JPEG, copy PNG, and export to PDF, PNG or JPEG on US Letter at 300 dpi. Top bar grouped with separators; app icon with the version in the corner
-- Select: a Pencil or finger resting on an object doesn't move it until it has moved clearly
+- Select: tapping a colour swatch recolours the selected stroke, shape or text (v0.34.8). A Pencil or finger resting on an object doesn't move it until it has moved clearly
 - PNG export and PDF export at true size on US Letter (300 dpi, visible layers only)
 - Undo and redo, limited to 15 steps
 
