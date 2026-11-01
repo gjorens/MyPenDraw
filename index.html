@@ -581,7 +581,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.36.1';
+  const APP_VERSION = '0.36.2';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -3399,8 +3399,20 @@
     updateButtons();
   }
 
+  // The drawer that goes with a tool, if it has one
+  function toolDrawer(t) {
+    if (['rect', 'oval', 'arc', 'tri', 'line', 'para', 'poly', 'vp'].includes(t)) return 'shapes';
+    return ['pen', 'brush', 'eraser', 'text', 'measure'].includes(t) ? t : null;
+  }
+  // Picking a tool by tap: if a drawer is open and this tool has its own drawer, that drawer opens instead
+  function pickTool(t) {
+    setTool(t);
+    const d = toolDrawer(t);
+    if (openDrawer && d && d !== openDrawer) { openDrawer = d; syncDrawers(); }
+  }
+
   document.querySelectorAll('.tool-btn').forEach(b => {
-    b.onclick = () => setTool(b.dataset.tool);
+    b.onclick = () => pickTool(b.dataset.tool);
   });
 
   // Slide-out drawers: only one is open at a time
@@ -3468,7 +3480,7 @@
     b.onclick = () => {
       if (held) { held = false; return; }   // the long press already opened the drawer
       if (b.dataset.tap) { taps[b.dataset.tap](); return; }
-      setTool(toolName);
+      pickTool(toolName);
     };
   });
 
