@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.5';
+  const APP_VERSION = '0.37.6';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2020,7 +2020,12 @@
     let item;
     if (d.kind === 'move') {
       let cx = o.cx + (q.x - d.start.x), cy = o.cy + (q.y - d.start.y);
-      if (snap) { cx = Math.round(cx / GRID) * GRID; cy = Math.round(cy / GRID) * GRID; }
+      if (snap && ref.shape && Math.abs(o.rot) < 1e-9) {
+        // Shapes snap their top-left corner to the grid, like point shapes do, so an odd-sized shape
+        // doesn't land half a cell off the grid
+        cx = Math.round((cx - o.w / 2) / GRID) * GRID + o.w / 2;
+        cy = Math.round((cy - o.h / 2) / GRID) * GRID + o.h / 2;
+      } else if (snap) { cx = Math.round(cx / GRID) * GRID; cy = Math.round(cy / GRID) * GRID; }
       item = applyFrame(ref, { ...o, cx, cy });
     } else if ((d.kind === 'rotate' || d.kind === 'centre') && d.centre) {
       // Arcs turn about the centre of their circle
