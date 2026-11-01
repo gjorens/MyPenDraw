@@ -522,7 +522,7 @@
   <button id="textBold" class="opt-btn">B  Bold: Off</button>
   <div class="sub">Sample</div>
   <div id="textSample" class="text-sample">Aa</div>
-  <p class="hint">Changes apply to the selected text. With nothing selected, they set the next text you place. Hold a custom colour to change it.</p>
+  <p class="hint">Changes apply to the selected text. With nothing selected, they set the next text you place. Colour is chosen from the Colour palette.</p>
 </aside>
 
 <!-- Custom colour editor: a popup opened by holding a custom colour -->
@@ -581,7 +581,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.36.0';
+  const APP_VERSION = '0.36.1';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -3548,7 +3548,7 @@
     syncColorUI();
   }
 
-  // ---------- colour boxes: one shared box in each object drawer ----------
+  // ---------- colour palette: solid, custom and recent colours, per tool ----------
   const SOLIDS = [['#111111', 'Black'], ['#e03131', 'Red'], ['#1c7ed6', 'Blue'], ['#2f9e44', 'Green'], ['#f08c00', 'Orange'], ['#7048e8', 'Purple'], ['#0c8599', 'Teal'], ['#8d5a2b', 'Brown'], ['#868e96', 'Grey'], ['#d6336c', 'Pink']];
   const RECENT_KEY = 'pendraw-recent-colors';
   let recents = {};   // last colours picked, per drawer: most recent first, at most eight
@@ -3677,7 +3677,7 @@
   });
 
   // Six custom colours: a quick tap uses the colour; holding for about half a second opens the editor
-  // Each custom colour appears in the Colour drawer and the Text drawer; both buttons stay in step
+  // Custom colour buttons: the palette holds them all, so each one is wired once
   const customBtns = [...document.querySelectorAll('button.custom')];
   const customBtnsFor = i => customBtns.filter(b => Number(b.dataset.idx) === i);
   customBtns.forEach(btn => {
