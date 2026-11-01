@@ -581,7 +581,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.36.5';
+  const APP_VERSION = '0.36.6';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1168,7 +1168,10 @@
     const step = Math.max(0.5, stroke.size * 0.06);   // spacing depends on the size, never the pressure
     for (const raw of pts) {
       // Pressure eases from point to point, so the width doesn't jump with each sample
-      const pt = { x: raw.x, y: raw.y, p: state.ps === undefined ? raw.p : state.ps + (raw.p - state.ps) * 0.3 };
+      // Input positions are eased too, so jitter in the samples doesn't bunch or thin the dabs
+      const sm = state.sm || (state.sm = { x: raw.x, y: raw.y });
+      sm.x += (raw.x - sm.x) * 0.5; sm.y += (raw.y - sm.y) * 0.5;
+      const pt = { x: sm.x, y: sm.y, p: state.ps === undefined ? raw.p : state.ps + (raw.p - state.ps) * 0.3 };
       state.ps = pt.p;
       if (!state.last) {
         paintDab(c, stroke, pt.x, pt.y, pt.p, state.rand);

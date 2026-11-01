@@ -12,6 +12,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Colour boxes in the Pen, Brush, Shapes and Text drawers, each showing the last eight colours picked in that drawer (empty circles until then). Each drawer shows a sample of its object in the current colour, width and opacity. The custom colour editor has an eyedropper that picks a colour from the drawing (v0.35.0).
 - Colour palette is always a window that the Colour button shows and hides. Each tool keeps its own current colour, which the Colour button shows. The palette shows that tool's last eight colours, then 10 solid and 10 custom colours (v0.36.0).
 - If a drawer is open and you tap a tool that has its own drawer (Pen, Brush, Eraser, Text, Measure, or a shape tool), that drawer opens instead (v0.36.2).
+- Brush strokes are smoothed before they are painted, so hand wobble and sampling jitter give more even density (v0.36.6).
 - Brush: round, soft, square, flat and spray shapes, with size, opacity, colour and Pencil pressure (harder means bigger and darker). Brush strokes are undoable but not editable. The shapes wrap three across, and a sample box shows the current brush (v0.31.3).
 - Fill, text (font, size, colour, bold), and pictures (SVG, PNG, JPEG, WebP, GIF)
 - Select, move, resize, rotate, cut, copy, paste, delete
