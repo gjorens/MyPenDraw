@@ -369,7 +369,7 @@
   <label class="check"><input type="checkbox" id="dimLiveCheck"> Show dimension lines while drawing</label>
   <label class="check"><input type="checkbox" id="dimKeepCheck"> Maintain dimension lines</label>
   <label class="check"><input type="checkbox" id="dimSelCheck"> Show dimensions of selected objects</label>
-  <p class="hint">The Dims button on the rail shows or hides dimension lines on all shapes. The checkbox above does the same for the selected shape.</p>
+  <p class="hint">The Dims button on the rail shows or hides dimension lines on all shapes. While the last checkbox is ticked, whichever shape you select shows its dimensions.</p>
 </aside>
 
 <!-- Shapes drawer -->
@@ -591,7 +591,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.34.6';
+  const APP_VERSION = '0.34.7';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1756,6 +1756,8 @@
     if (selected) {
       setTransform(ctx);
       drawSelection(ctx);
+      // With "Show dimensions of selected objects" on, the selected shape shows its dimensions
+      if (dimSelMode && isDimShape(selected)) drawDims(ctx, selected);
     }
     setTransform(ctx);
     if (measuresVisible()) {
@@ -3018,6 +3020,7 @@
   let dimLive = false;      // dimension lines while drawing rectangles and ovals
   let dimKeep = false;      // keep those dimension lines on the drawing
   let dimsAll = false;      // dimension lines on every shape that does not have its own setting
+  let dimSelMode = false;   // "Show dimensions of selected objects": the selected shape shows its dimensions
   const FRACS = ['', '1/8', '1/4', '3/8', '1/2', '5/8', '3/4', '7/8'];
   updateGrid();             // a saved calibration changes the scale, so set the grid from it on load
 
@@ -3161,9 +3164,7 @@
     const dimAll = $('dimAllBtn');
     dimAll.classList.toggle('active', dimsAll);
     dimAll.title = dimsAll ? 'Dimensions on all shapes: on (tap to hide)' : 'Dimensions on all shapes: off (tap to show)';
-    const ok = !!selected && isDimShape(selected);
-    $('dimSelCheck').disabled = !ok;
-    $('dimSelCheck').checked = ok && showsDims(selected);
+    $('dimSelCheck').checked = dimSelMode;
   }
   // Shows or hides dimension lines on every shape. Each shape's own setting is cleared, so all follow.
   function setDimsAll(on) {
@@ -3179,19 +3180,15 @@
     if (i >= 0) selected = strokes[i];
     redrawInk();
   }
-  // Shows or hides dimension lines on the selected shape only
-  function toggleSelectedDims() {
-    if (!selected || !isDimShape(selected)) return;
-    if (!showsDims(selected) && needsCalibration(toggleSelectedDims)) return;
-    pushHistory(snapshot());
-    const item = { ...selected, dims: !showsDims(selected) };
-    strokes = strokes.map(s => (s === selected ? item : s));
-    selected = item;
-    redrawInk();
-  }
+  // The checkbox stays on until unticked: whichever shape is selected shows its dimensions
   $('dimSelCheck').onchange = e => {
-    if (selected && isDimShape(selected) && e.target.checked !== showsDims(selected)) toggleSelectedDims();
+    if (e.target.checked && needsCalibration(() => { dimSelMode = true; syncDimControls(); scheduleRender(false); })) {
+      e.target.checked = false;
+      return;
+    }
+    dimSelMode = e.target.checked;
     syncDimControls();
+    scheduleRender(false);
   };
 
   // ---------- export ----------
