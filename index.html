@@ -585,7 +585,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.7';
+  const APP_VERSION = '0.37.8';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -1521,12 +1521,23 @@
     const x0 = -view.ox / s, x1 = (w - view.ox) / s;
     const y0 = -view.oy / s, y1 = (h - view.oy) / s;
     c.setTransform(d * s, 0, 0, d * s, d * view.ox, d * view.oy);
-    c.strokeStyle = '#c9d3df';
     c.lineWidth = 1 / s;   // one screen pixel at any zoom
-    c.beginPath();
-    for (let x = Math.floor(x0 / GRID) * GRID; x <= x1; x += GRID) { c.moveTo(x, y0); c.lineTo(x, y1); }
-    for (let y = Math.floor(y0 / GRID) * GRID; y <= y1; y += GRID) { c.moveTo(x0, y); c.lineTo(x1, y); }
-    c.stroke();
+    // With the grid in inches, every inch line is drawn a little darker than the lines between them
+    const inch = gridUnit === 'in' ? PX_PER_INCH : 0;
+    const isInch = v => inch > 0 && Math.abs(v / inch - Math.round(v / inch)) < 1e-6;
+    for (const major of [false, true]) {
+      c.strokeStyle = major ? '#9aabbf' : '#c9d3df';
+      c.beginPath();
+      for (let i = Math.floor(x0 / GRID); i * GRID <= x1; i++) {
+        const x = i * GRID;
+        if (isInch(x) === major) { c.moveTo(x, y0); c.lineTo(x, y1); }
+      }
+      for (let i = Math.floor(y0 / GRID); i * GRID <= y1; i++) {
+        const y = i * GRID;
+        if (isInch(y) === major) { c.moveTo(x0, y); c.lineTo(x1, y); }
+      }
+      c.stroke();
+    }
   }
 
   // Isometric grid: three families of lines, each a set of parallel lines spaced GRID apart.
