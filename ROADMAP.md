@@ -16,6 +16,7 @@ Current version: see the number shown in the bottom-right corner of the app.
 - Brush shapes: Round, Soft, Square, Flat, Spray, Calligraphy (narrow nib at 30 degrees), Marker (hard edge, ignores pressure), Star (stamps) and Splatter (scattered drops) (v0.37.0).
 - App icon at the top of the tool rail, the same size as the tool buttons and clear of the iOS window buttons in windowed multitasking. The version sits in its corner (v0.37.2).
 - With the grid in inches, every inch line is drawn a little darker (v0.37.8).
+- A palm or Pencil resting on the screen no longer selects page text or opens the Copy / Look Up menu (v0.37.9).
 - The colour palette moves to the right when Layers opens, and stays where it is when Layers closes (v0.37.7).
 - Rectangles, ovals, arcs and triangles snap their top-left corner to the grid when moved, so one grid step moves them one cell (v0.37.6).
 - A fill moves, rotates or resizes with the object it was filled inside, so moving a filled shape no longer floods the background (v0.37.3; v0.37.4 and v0.37.5 for rectangles and ovals, which store their corners as points). Fills already damaged by an earlier move need to be filled again.

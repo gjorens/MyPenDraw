@@ -176,6 +176,10 @@
   /* ---------- canvas ---------- */
   #stage { position: fixed; top: var(--bar-h); left: var(--rail-w); right: 0; bottom: 0; }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; background: #fff; }
+  /* A palm or Pencil resting on the screen must not select text or open the iPad Copy / Look Up callout.
+     Text fields keep their own editing. */
+  body, body * { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  input, textarea { -webkit-user-select: text; user-select: text; }
 
   /* App icon at the top of the rail, sized like the tool buttons; the version is overlaid on it */
   #appIcon { position: relative; width: 100%; height: 58px; flex-shrink: 0; border-radius: 10px; border: 1.5px solid #7a7a7a; background: #fff; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
@@ -585,7 +589,7 @@
 <script>
 (() => {
   // Bump this when you make a change you want to track
-  const APP_VERSION = '0.37.8';
+  const APP_VERSION = '0.37.9';
   document.getElementById('version').textContent = 'v' + APP_VERSION;
 
   const $ = id => document.getElementById(id);
@@ -2411,6 +2415,9 @@
     updateButtons();
   }
   canvas.addEventListener('pointerup', endPointer);
+  // Stop the browser's own selection and long-press menu anywhere outside text fields
+  document.addEventListener('selectstart', e => { if (!e.target.closest || !e.target.closest('input, textarea')) e.preventDefault(); });
+  document.addEventListener('contextmenu', e => { if (!e.target.closest || !e.target.closest('input, textarea')) e.preventDefault(); });
   canvas.addEventListener('pointercancel', endPointer);
 
   // ---------- history ----------
